@@ -1,0 +1,751 @@
+---
+format:
+  gfm:
+    wrap: none
+jupyter: python3
+execute:
+  warning: false
+---
+
+# Chapter 12 — Classification
+
+```{python}
+#| echo: false
+from pathlib import Path
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+GARNET, GREY, BLUE, SEED = "#881124", "#8c8c8c", "#1f77b4", 368
+plt.rcParams.update({"figure.figsize": (7, 3.6), "axes.spines.top": False,
+                     "axes.spines.right": False, "font.size": 11})
+
+URL = ("https://raw.githubusercontent.com/rfordatascience/tidytuesday/"
+       "main/data/2020/2020-02-11/hotels.csv")
+path = Path("../data/hotels.csv")
+if not path.exists():
+    path.parent.mkdir(exist_ok=True)
+    pd.read_csv(URL).to_csv(path, index=False)
+hotels = pd.read_csv(path)
+cancel_rate = hotels["is_canceled"].mean()
+rate_by_hotel = hotels.groupby("hotel")["is_canceled"].mean()
+```
+
+> **The question:** you run a hotel where more than a third of bookings cancel. Should you resell rooms that are already booked, and if so, which ones?
+
+
+## A probability, then a decision
+
+Picture a 200-room hotel, fully booked for tonight. In the data we will use, `{python} f"{len(hotels):,}"` real bookings at two hotels in Portugal between 2015 and 2017, **`{python} f"{cancel_rate:.0%}"` of bookings were cancelled**. If tonight is typical, about `{python} round(200 * cancel_rate)` of your rooms will be empty, and an empty room is a night's revenue gone.
+
+So you are tempted to resell some rooms. The catch is that a guest who does turn up to a full hotel has to be **walked**: you pay for a room at a hotel down the road, a taxi, and an apology, and you may lose the customer. Overbook too little and rooms sit empty; overbook too much and you are paying to send guests elsewhere.
+
+Airlines, hotels and car-rental firms all do this, and the field is called revenue management. At its heart is a classification problem. For each booking you want two things, in this order:
+
+1. **A probability.** What is the chance this booking cancels? Call it $\hat p$.
+2. **A decision.** Given $\hat p$ and what each kind of mistake costs, do you resell the room?
+
+They are separate steps, and you can get either one wrong. Most of this chapter is about getting the first right and then not ruining it in the second.
+
+Classification is everywhere in applied economics. A bank deciding on a loan needs the probability of default. A tax authority choosing whom to audit needs the probability of under-reporting. A job-training programme deciding whom to enrol needs the probability of long-term unemployment. Each is a prediction policy problem of the kind we met in Chapter 9, with a label that is yes or no rather than a number.
+
+## Why not OLS?
+
+```{python}
+#| echo: false
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import make_pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression, LinearRegression
+
+LEAKS = ["reservation_status", "reservation_status_date", "assigned_room_type"]
+hotels["domestic"] = (hotels["country"] == "PRT").astype(int)
+X = hotels.drop(columns=["is_canceled"] + LEAKS + ["agent", "company", "country"])
+y = hotels["is_canceled"]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=SEED)
+num = X.select_dtypes("number").columns.tolist()
+cat = X.select_dtypes(exclude="number").columns.tolist()
+
+def make_prep():
+    return ColumnTransformer([
+        ("num", make_pipeline(SimpleImputer(strategy="median"), StandardScaler()), num),
+        ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), cat)])
+
+lpm = make_pipeline(make_prep(), LinearRegression()).fit(X_train, y_train)
+q = lpm.predict(X_test)
+lpm_below, lpm_above = (q < 0).mean(), (q > 1).mean()
+```
+
+You know how to regress a 0/1 outcome on features: that is the **linear probability model** (LPM), and for estimating an average effect near the middle of the data it is often perfectly good. Econometricians use it all the time, and they are right to.
+
+For prediction it has a flaw you can see immediately. A straight line does not know that probabilities stop at 0 and 1. Fit an LPM to the hotel bookings, with all the features we will use later, and `{python} f"{lpm_below:.1%}"` of the test bookings get a predicted "probability" below zero, while `{python} f"{lpm_above:.1%}"` get one above one.
+
+That matters more than it sounds, because decisions get made in the tails. The bookings you are thinking of reselling are exactly the ones the model thinks most likely to cancel, and that is where the line overshoots. You cannot multiply a cost by a probability of 1.3.
+
+### Worked example — reading an impossible prediction
+
+The LPM predicts $\hat p = -0.08$ for a booking. What does it mean, and what would you do with it?
+
+### Solution
+
+Taken literally it means nothing: no event has a probability of minus eight per cent. What the model is saying is "this booking looks even less likely to cancel than the bookings that defined the bottom of my line", and the straight line then runs past zero. You could clip it to 0, and people do. But clipping a prediction after the fact is a sign that the model is the wrong shape. We would rather use one that is built to stay between 0 and 1.
+
+## Logistic regression
+
+**Logistic regression** keeps the linear score you know from OLS, $\beta_0 + \beta_1 x_1 + \dots + \beta_k x_k$, and squashes it through an S-shaped curve so that the output is always between 0 and 1:
+
+$$\hat p(x) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 x_1 + \dots + \beta_k x_k)}}$$
+
+A very negative score gives $\hat p$ near 0, a very positive score gives $\hat p$ near 1, and a score of zero gives exactly one half. The S-curve is called the **sigmoid**.
+
+```{python}
+#| echo: false
+#| fig-cap: "OLS and logistic regression fitted to the same bookings."
+lt = hotels[["lead_time", "is_canceled"]].sample(4000, random_state=SEED)
+grid = np.linspace(0, 700, 200)[:, None]
+ols1 = LinearRegression().fit(lt[["lead_time"]], lt["is_canceled"])
+lgt1 = LogisticRegression().fit(lt[["lead_time"]], lt["is_canceled"])
+jitter = np.random.default_rng(SEED).normal(0, 0.02, len(lt))
+fig, ax = plt.subplots()
+ax.scatter(lt["lead_time"], lt["is_canceled"] + jitter, s=4, alpha=0.2, color=GREY, label="bookings (jittered)")
+ax.plot(grid, ols1.predict(pd.DataFrame(grid, columns=["lead_time"])), color=BLUE, lw=2, label="OLS (linear probability)")
+ax.plot(grid, lgt1.predict_proba(pd.DataFrame(grid, columns=["lead_time"]))[:, 1], color=GARNET, lw=2.5, label="logistic regression")
+ax.axhline(1, color="black", lw=0.5); ax.axhline(0, color="black", lw=0.5)
+ax.set(xlabel="Days between booking and arrival (lead time)", ylabel="Pr(cancel)",
+       title="Bookings made far ahead cancel more often")
+ax.legend(frameon=False, fontsize=9); plt.show()
+```
+
+With one feature, lead time, the difference is visible. The line runs above 1 for bookings made far in advance; the S-curve bends to stay below it.
+
+How are the $\beta$s chosen? Not by least squares. Logistic regression uses **maximum likelihood**: pick the coefficients that make the outcomes we actually saw as probable as possible. A booking that cancelled rewards the model for having given it a high $\hat p$; a booking that showed up rewards a low one. The quantity being minimised has a name you will see in software output, **log loss**: the average of $-\log(\text{the probability the model gave to what actually happened})$. Its key property is that it punishes *confident* mistakes brutally. Saying 0.99 for a booking that shows up costs far more than saying 0.6. There is no formula for the answer, as there is for OLS; the computer searches, and because the problem has a single peak, it always finds the same one.
+
+### Odds, lightly
+
+Logistic regression is linear in the **log-odds**. The odds are $p/(1-p)$: a probability of 0.2 is odds of 1 to 4, or 0.25. Each coefficient says how a one-unit change in $x$ shifts the log-odds, so $e^{\beta}$ is the factor by which the odds are multiplied, the **odds ratio**.
+
+I say "lightly" because odds ratios are easy to misread. An odds ratio of 2 does not mean "twice as likely". When the event is rare, odds and probabilities are nearly the same and the shortcut is harmless. When the base rate is 37%, as here, it is not.
+
+### Worked example — what a special request does to the odds
+
+```{python}
+#| echo: false
+import statsmodels.formula.api as smf
+train_df = X_train.assign(is_canceled=y_train)
+sm1 = smf.logit("is_canceled ~ total_of_special_requests", data=train_df).fit(disp=0)
+b0, b1 = sm1.params["Intercept"], sm1.params["total_of_special_requests"]
+or1 = np.exp(b1)
+p0 = 1 / (1 + np.exp(-b0))
+odds0 = p0 / (1 - p0)
+odds1 = odds0 * or1
+p1 = odds1 / (1 + odds1)
+```
+
+Fit a logistic regression of cancellation on the number of special requests a guest made (a cot, a high floor, a late check-in) using the training bookings. The coefficient is `{python} f"{b1:.3f}"`. **(a)** What is the odds ratio? **(b)** The model says a booking with no requests cancels with probability `{python} f"{p0:.3f}"`. What does it say for a booking with one request?
+
+### Solution
+
+**(a)** The odds ratio is $e$ raised to the coefficient: `{python} f"{or1:.3f}"`. Each extra request multiplies the odds of cancelling by about `{python} f"{or1:.2f}"`, that is, it cuts them by `{python} f"{1 - or1:.0%}"`.
+
+**(b)** Convert to odds, multiply, convert back:
+
+- odds with no requests: `{python} f"{p0:.3f}"` / (1 − `{python} f"{p0:.3f}"`) = `{python} f"{odds0:.3f}"`
+- odds with one request: `{python} f"{odds0:.3f}"` × `{python} f"{or1:.3f}"` = `{python} f"{odds1:.3f}"`
+- probability: `{python} f"{odds1:.3f}"` / (1 + `{python} f"{odds1:.3f}"`) = `{python} f"{p1:.3f}"`
+
+So the probability falls from `{python} f"{p0:.0%}"` to `{python} f"{p1:.0%}"`. Notice the odds fell by `{python} f"{1 - or1:.0%}"` but the probability fell by `{python} f"{1 - p1 / p0:.0%}"`: odds and probabilities move by different proportions whenever the event is common.
+
+And the economist's caution: this is a $\hat y$ model, not a $\hat\beta$ one. Guests who ask for a cot are guests who have planned the trip. Nobody believes that the hotel could cut cancellations by encouraging requests.
+
+## Drop the leaks, then fit
+
+```{python}
+#| echo: false
+leak_tab = pd.crosstab(hotels["reservation_status"], hotels["is_canceled"])
+from sklearn.metrics import accuracy_score
+leak_cols = ["lead_time", "adr", "total_of_special_requests", "reservation_status"]
+leaky = make_pipeline(ColumnTransformer([
+            ("num", StandardScaler(), leak_cols[:3]),
+            ("cat", OneHotEncoder(handle_unknown="ignore"), ["reservation_status"])]),
+        LogisticRegression(max_iter=1000))
+Xl_tr, Xl_te = hotels.loc[X_train.index, leak_cols], hotels.loc[X_test.index, leak_cols]
+leak_acc = leaky.fit(Xl_tr, y_train).score(Xl_te, y_test)
+```
+
+Before modelling, the question from Chapter 9: **would I know this at the moment I have to decide?** The hotel decides whether to resell a room before the arrival date. Three columns in the data are recorded later:
+
+- `reservation_status` is "Canceled", "No-Show" or "Check-Out", which is the outcome itself, written in words.
+- `reservation_status_date` is when that status was set.
+- `assigned_room_type` is the room the guest was actually given at check-in.
+
+The first one is not subtle:
+
+```{python}
+#| echo: false
+print(leak_tab.to_string())
+```
+
+Every status lines up with exactly one value of `is_canceled`. A logistic regression with `reservation_status` and three innocent features scores `{python} f"{leak_acc:.1%}"` accuracy on the test set. It is useless, because at decision time the column does not exist yet.
+
+We drop those three, plus `agent` and `company` (ID numbers, not quantities) and `country`, which has more than 170 values; in its place I keep a single dummy, `domestic`, for guests from Portugal. Then the usual Chapter 9 machinery: a **stratified** 80/20 split, so that both halves keep the `{python} f"{cancel_rate:.0%}"` cancellation rate, and a pipeline that fills and scales the numbers and one-hot encodes the categories.
+
+```{python}
+#| echo: false
+logit = make_pipeline(make_prep(), LogisticRegression(max_iter=1000)).fit(X_train, y_train)
+p_test = logit.predict_proba(X_test)[:, 1]
+```
+
+```python
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=368)
+logit = make_pipeline(make_prep(), LogisticRegression(max_iter=1000)).fit(X_train, y_train)
+p_test = logit.predict_proba(X_test)[:, 1]
+```
+
+`predict_proba` returns two columns, the probability of each class; column 1 is $\hat p$, the probability of cancelling. The `{python} len(num)` numeric and `{python} len(cat)` categorical features become `{python} make_prep().fit(X_train).transform(X_train.head()).shape[1]` model inputs.
+
+One quick sanity check. The average $\hat p$ on the test set is `{python} f"{p_test.mean():.3f}"`, and the actual cancellation rate there is `{python} f"{y_test.mean():.3f}"`. A logistic regression with an intercept matches the base rate on average by construction. If yours does not, something is broken.
+
+### Worked example — the 100% model
+
+A classmate shows you a cancellation model with `{python} f"{leak_acc:.1%}"` test accuracy. She swears she used a proper train/test split. What do you ask her?
+
+### Solution
+
+What features she used, and when each one becomes known. A test split protects against overfitting; it does nothing against leakage, because the leaked column is in the test set too. An accuracy that high on a messy human outcome (people cancel holidays for all sorts of reasons) is a warning in itself. Here the culprit is `reservation_status`. In econometric language she controlled for the outcome.
+
+## The "nobody cancels" baseline
+
+```{python}
+#| echo: false
+acc_nobody = 1 - y_test.mean()
+acc50 = accuracy_score(y_test, p_test > 0.5)
+```
+
+To turn $\hat p$ into a yes/no prediction, the default is to say "cancels" when $\hat p > 0.5$. With that rule, the logistic regression's **accuracy**, the share of test bookings it classifies correctly, is `{python} f"{acc50:.1%}"`.
+
+Is that good? Chapter 9's lesson was to compare everything to a baseline. The laziest classifier predicts **"shows up"** for every booking. It is right for every booking that did not cancel, so its accuracy is one minus the cancellation rate: `{python} f"{acc_nobody:.1%}"`. The logistic regression is `{python} f"{100 * (acc50 - acc_nobody):.0f}"` percentage points better. A real gain, but a much less impressive one than "`{python} f"{acc50:.0%}"` accurate" sounds on its own.
+
+### Worked example — accuracy when events are rare
+
+A bank's fraud model is 99.8% accurate. 0.1% of transactions are fraudulent. Is the model any good?
+
+### Solution
+
+You cannot tell, and there is reason to worry. The rule "nothing is ever fraud" is 99.9% accurate, which beats the model. A fraud model is valuable only if it catches fraud, and accuracy barely registers whether it does: catching every fraud would raise accuracy by at most 0.1 percentage points. With rare events, accuracy is dominated by the easy majority. We need measures that look at the two kinds of mistake separately, which is the next section.
+
+## The confusion matrix
+
+```{python}
+#| echo: false
+from sklearn.metrics import confusion_matrix, precision_score, recall_score, roc_auc_score, roc_curve
+tn, fp, fn, tp = confusion_matrix(y_test, p_test > 0.5).ravel()
+prec50, rec50 = precision_score(y_test, p_test > 0.5), recall_score(y_test, p_test > 0.5)
+```
+
+Lay out the four possible outcomes on the `{python} f"{len(y_test):,}"` test bookings, with the 0.5 rule:
+
+|  | **Predict: shows up** | **Predict: cancels** |
+|---|---|---|
+| **Actually shows up** | `{python} f"{tn:,}"` true negatives | `{python} f"{fp:,}"` false positives |
+| **Actually cancels** | `{python} f"{fn:,}"` false negatives | `{python} f"{tp:,}"` true positives |
+
+"Positive" means the model says the event (a cancellation) happens. The diagonal is where the model is right. The two off-diagonal cells are different mistakes, and for the hotel they are *very* different:
+
+- A **false positive** is a booking we expected to cancel that shows up. If we resold that room, we walk a guest.
+- A **false negative** is a cancellation we did not see coming. The room sits empty.
+
+Accuracy adds those two together as if they cost the same. Two measures pull them apart, and they are worth learning as sentences rather than formulas.
+
+**Precision**: of the bookings we flag as cancellations, what share really cancel? *When we resell a room, how often are we right?* Here, `{python} f"{tp:,}"` out of `{python} f"{tp + fp:,}"`, or `{python} f"{prec50:.0%}"`.
+
+**Recall**: of the bookings that really cancel, what share do we flag? *Of all the rooms that will sit empty, how many do we catch?* Here, `{python} f"{tp:,}"` out of `{python} f"{tp + fn:,}"`, or `{python} f"{rec50:.0%}"`. Recall is also called the **true positive rate**.
+
+The two pull against each other. Flag more bookings and you catch more cancellations (recall rises) but you also flag more guests who were going to show up (precision usually falls). The threshold is the lever.
+
+### Worked example — buying recall with precision
+
+```{python}
+#| echo: false
+prec30, rec30 = precision_score(y_test, p_test > 0.3), recall_score(y_test, p_test > 0.3)
+flag50, flag30 = (p_test > 0.5).mean(), (p_test > 0.3).mean()
+```
+
+Lower the threshold from 0.5 to 0.3. Predict, before computing, what happens to the share of bookings flagged, to recall, and to precision.
+
+### Solution
+
+| Threshold | Bookings flagged | Recall | Precision |
+|---|---|---|---|
+| 0.5 | `{python} f"{flag50:.0%}"` | `{python} f"{rec50:.0%}"` | `{python} f"{prec50:.0%}"` |
+| 0.3 | `{python} f"{flag30:.0%}"` | `{python} f"{rec30:.0%}"` | `{python} f"{prec30:.0%}"` |
+
+A lower bar flags more bookings. Recall goes up, and it *must*: every booking flagged at 0.5 is still flagged at 0.3, so we cannot catch fewer cancellations. Precision goes down, because the extra bookings we now flag are the less certain ones, and more of them show up. Precision is not guaranteed to fall, but it usually does.
+
+Which threshold is right depends entirely on what each mistake costs. We will get there; first, a way to see all thresholds at once.
+
+## The ROC curve and AUC
+
+```{python}
+#| echo: false
+fpr, tpr, thr = roc_curve(y_test, p_test)
+auc_logit = roc_auc_score(y_test, p_test)
+def point_at(c):
+    pred = p_test > c
+    return pred[y_test.values == 0].mean(), pred[y_test.values == 1].mean()
+```
+
+Every threshold gives one confusion matrix, and from each we can read two rates: the **true positive rate** (recall: the share of cancellations flagged) and the **false positive rate** (the share of guests who show up that we flag anyway). Plot one against the other for every possible threshold and you have the **ROC curve**. (The name comes from radar engineers in the Second World War, which is why it is unhelpful.)
+
+```{python}
+#| echo: false
+#| fig-cap: "ROC curve for the logistic regression on the test bookings."
+fig, ax = plt.subplots(figsize=(5.2, 4.6))
+ax.plot(fpr, tpr, color=GARNET, lw=2.5, label=f"logistic regression (AUC {auc_logit:.2f})")
+ax.plot([0, 1], [0, 1], ls="--", color=GREY, label="coin flip (AUC 0.50)")
+for c in [0.3, 0.5, 0.8]:
+    x_, y_ = point_at(c)
+    ax.plot(x_, y_, "o", color="black")
+    ax.annotate(f"threshold {c}", (x_, y_), xytext=(8, -12), textcoords="offset points", fontsize=9)
+ax.set(xlabel="False positive rate (guests who show up, flagged)",
+       ylabel="True positive rate (cancellations flagged)", title="Every threshold at once")
+ax.legend(frameon=False, fontsize=9, loc="lower right"); plt.show()
+```
+
+The bottom-left corner is "flag nobody"; the top-right is "flag everybody". A model that knows nothing traces the diagonal. A perfect model goes straight up the left edge to the top. The black dots are three thresholds; moving the threshold slides you along the curve, it does not move the curve.
+
+The **AUC**, the area under the curve, summarises it in one number: here `{python} f"{auc_logit:.3f}"`. It has a lovely interpretation. Pick one booking that cancelled and one that did not, at random. The AUC is the probability that the model gives the cancelled one the higher $\hat p$. An AUC of 0.5 is a coin flip; 1 is a perfect ranking.
+
+AUC ignores the threshold. That makes it the right number for comparing how well two models *rank* bookings, and the wrong number for deciding what to do: no hotel resells a room "at an AUC".
+
+### Worked example — checking the AUC by drawing pairs
+
+Verify the interpretation of the AUC by brute force: draw 100,000 random pairs of one cancelled and one kept test booking, and count how often the cancelled one has the higher $\hat p$.
+
+### Solution
+
+```{python}
+rng = np.random.default_rng(SEED)
+p_cancel, p_kept = p_test[y_test.values == 1], p_test[y_test.values == 0]
+a, b = rng.choice(p_cancel, 100_000), rng.choice(p_kept, 100_000)
+share = (a > b).mean() + 0.5 * (a == b).mean()     # ties count half
+```
+
+The cancelled booking has the higher $\hat p$ in `{python} f"{share:.3f}"` of pairs; the AUC is `{python} f"{auc_logit:.3f}"`. Same number, up to the noise from sampling pairs. If you remember one thing about AUC, remember this: **it is a statement about ranking pairs**, not about any particular decision.
+
+## The threshold is a business decision
+
+Now the money. Here is what each outcome costs the hotel for one booking:
+
+|  | **Don't resell** | **Resell the room** |
+|---|---|---|
+| **Guest shows up** | \$0 | **\$300**: walk the guest to another hotel |
+| **Guest cancels** | **\$100**: an empty room | \$0 |
+
+Walking a guest costs three times as much as an empty room. For a booking with cancellation probability $\hat p$, the expected cost of reselling is $300(1 - \hat p)$, and the expected cost of not reselling is $100\hat p$. Resell when the first is smaller:
+
+$$300\,(1-\hat p) < 100\,\hat p \quad\Longleftrightarrow\quad \hat p > \frac{300}{300 + 100} = 0.75$$
+
+In general, act when $\hat p$ exceeds $c_{FP}/(c_{FP} + c_{FN})$, the cost of a false positive over the sum of the two costs. The default 0.5 is what you get if the two mistakes cost the same. Here they do not, so the hotel should resell only when it is quite sure.
+
+The 0.75 assumes $\hat p$ is honest, which we check in the next section. We can also find the threshold directly from data. The rule from Chapter 9 applies: we must not pick it on the test set. So carve a **validation** set out of the training data, refit on the rest, compute the average cost at every threshold on the validation bookings, and take the cheapest.
+
+```{python}
+#| echo: false
+X_fit, X_val, y_fit, y_val = train_test_split(X_train, y_train, test_size=0.25, stratify=y_train, random_state=SEED)
+logit_fit = make_pipeline(make_prep(), LogisticRegression(max_iter=1000)).fit(X_fit, y_fit)
+p_val = logit_fit.predict_proba(X_val)[:, 1]
+COST_WALK, COST_EMPTY = 300, 100
+
+def avg_cost(threshold, p, y_true, walk=COST_WALK, empty=COST_EMPTY):
+    y_true = np.asarray(y_true)
+    resell = p > threshold
+    return (walk * (resell & (y_true == 0)) + empty * (~resell & (y_true == 1))).mean()
+
+thresholds = np.linspace(0.05, 0.95, 91)
+costs = [avg_cost(t, p_val, y_val) for t in thresholds]
+best_t = thresholds[int(np.argmin(costs))]
+p_test_fit = logit_fit.predict_proba(X_test)[:, 1]
+cost_best, cost_half = avg_cost(best_t, p_test_fit, y_test), avg_cost(0.5, p_test_fit, y_test)
+cost_theory, cost_never = avg_cost(0.75, p_test_fit, y_test), avg_cost(1.01, p_test_fit, y_test)
+saving_200 = 200 * (cost_half - cost_best)
+resold = p_test_fit > best_t
+walk_share = (resold & (y_test.values == 0)).sum() / resold.sum()
+```
+
+```{python}
+#| echo: false
+#| fig-cap: "Average cost per booking at each threshold, on the validation bookings."
+fig, ax = plt.subplots()
+ax.plot(thresholds, costs, color=GARNET, lw=2.5)
+ax.axvline(best_t, color="black", ls="--", label=f"cheapest on validation: {best_t:.2f}")
+ax.axvline(0.75, color=BLUE, ls="-.", label="theory: 0.75")
+ax.axvline(0.5, color=GREY, ls=":", label="default: 0.5")
+ax.set(xlabel="Resell if predicted Pr(cancel) > threshold", ylabel="Average cost per booking ($)",
+       title="Resell only when quite sure")
+ax.legend(frameon=False, fontsize=9); plt.show()
+```
+
+The cheapest threshold on the validation bookings is **`{python} f"{best_t:.2f}"`**, close to the theory's 0.75. Now, and only now, score it on the test set:
+
+| Rule | Average cost per booking (test) |
+|---|---|
+| Never resell | \$`{python} f"{cost_never:.2f}"` |
+| Resell if $\hat p > 0.5$ | \$`{python} f"{cost_half:.2f}"` |
+| Resell if $\hat p > 0.75$ (theory) | \$`{python} f"{cost_theory:.2f}"` |
+| Resell if $\hat p >$ `{python} f"{best_t:.2f}"` (validation) | \$`{python} f"{cost_best:.2f}"` |
+
+So, **should the hotel overbook? Yes, but selectively.** Reselling the rooms of bookings with $\hat p >$ `{python} f"{best_t:.2f}"` costs \$`{python} f"{cost_best:.2f}"` a booking, against \$`{python} f"{cost_never:.2f}"` for never reselling and \$`{python} f"{cost_half:.2f}"` for the default threshold. For a full 200-room hotel, moving from 0.5 to the cost-based threshold saves about \$`{python} f"{saving_200:,.0f}"` a night. Of the rooms it resells, only `{python} f"{walk_share:.1%}"` end up with a guest who has to be walked.
+
+The theory and the data agree to within \$`{python} f"{abs(cost_theory - cost_best):.2f}"` a booking, which is reassuring: it says the probabilities are close to honest. If they had disagreed badly, that would have been the first sign of a calibration problem.
+
+### Worked example — a cheaper walk
+
+The hotel negotiates a deal with the hotel next door, and walking a guest now costs \$150 rather than \$300. What is the new theoretical threshold, and what does the validation set say?
+
+### Solution
+
+```{python}
+#| echo: false
+costs150 = [avg_cost(t, p_val, y_val, walk=150) for t in thresholds]
+best150 = thresholds[int(np.argmin(costs150))]
+```
+
+The theory gives $150/(150 + 100) = 0.6$. Recomputing the cost curve on the validation bookings with a \$150 walk, the cheapest threshold is `{python} f"{best150:.2f}"`. When the expensive mistake gets cheaper, the hotel can afford to be less sure before reselling, so the threshold falls and more rooms are resold. The model did not change at all. **The model supplies $\hat p$; the business supplies the threshold.**
+
+## Are the probabilities honest?
+
+```{python}
+#| echo: false
+from sklearn.calibration import calibration_curve
+from sklearn.metrics import brier_score_loss
+frac, mean_p = calibration_curve(y_test, p_test, n_bins=10, strategy="quantile")
+mid = int(np.argmin(np.abs(mean_p - 0.3)))
+```
+
+A cost-based threshold is only as good as the probabilities going into it. A model is **calibrated** if, among bookings it gives $\hat p \approx 0.3$, about 30% actually cancel. To check, sort the test bookings by $\hat p$, cut them into ten equal groups, and plot the average $\hat p$ in each group against the share that actually cancelled. That is a **reliability curve**, and an honest model sits on the diagonal.
+
+For our logistic regression, the group whose average $\hat p$ is `{python} f"{mean_p[mid]:.2f}"` has an actual cancellation rate of `{python} f"{frac[mid]:.2f}"`. The full curve is drawn in the next section, next to a model that does much worse.
+
+Calibration matters whenever $\hat p$ is used as a number rather than as a ranking: to set a threshold from costs, to price a non-refundable rate, or to forecast how many rooms will be empty tonight by adding up the $\hat p$s. A model can rank bookings well (high AUC) and still be badly calibrated. Its probabilities can be systematically too extreme, or shifted up or down. One summary is the **Brier score**, the average of $(\hat p - y)^2$: the mean squared error of the probabilities, lower is better. Here it is `{python} f"{brier_score_loss(y_test, p_test):.3f}"`. For scale, always predicting the base rate would score $0.37 \times 0.63 \approx$ `{python} f"{cancel_rate * (1 - cancel_rate):.3f}"`.
+
+If a model is badly calibrated, the fix is to **recalibrate** it on held-out data: scikit-learn's `CalibratedClassifierCV` learns a mapping from the raw scores to honest probabilities. Logistic regression rarely needs it.
+
+### Worked example — forecasting empty rooms
+
+Tonight, 200 rooms are booked and the model's $\hat p$s for those bookings add up to 70.4. How many cancellations do you expect, and why does calibration matter for the answer?
+
+### Solution
+
+The expected number of cancellations is the sum of the probabilities: about 70. (Each booking contributes its own chance of cancelling, and expectations add.) That is the number a revenue manager uses to decide roughly how many rooms are "spare". It is right only if the probabilities are calibrated. If the model's $\hat p$s were all ten points too high, the sum would be twenty rooms too high, the hotel would overbook by twenty, and twenty guests would be walked.
+
+## Other classifiers
+
+```{python}
+#| echo: false
+import time
+from sklearn.naive_bayes import GaussianNB
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.neighbors import KNeighborsClassifier
+X_small = X_train.sample(20_000, random_state=SEED)
+y_small = y_train.loc[X_small.index]
+models = {"Logistic": LogisticRegression(max_iter=1000), "Naive Bayes": GaussianNB(),
+          "LDA": LinearDiscriminantAnalysis(), "KNN (k = 25)": KNeighborsClassifier(25)}
+rows, probs = [], {}
+for name, model in models.items():
+    t0 = time.perf_counter()
+    p = make_pipeline(make_prep(), model).fit(X_small, y_small).predict_proba(X_test)[:, 1]
+    probs[name] = p
+    rows.append({"model": name, "accuracy": accuracy_score(y_test, p > 0.5),
+                 "precision": precision_score(y_test, p > 0.5), "recall": recall_score(y_test, p > 0.5),
+                 "AUC": roc_auc_score(y_test, p), "Brier": brier_score_loss(y_test, p),
+                 "flagged": (p > 0.5).mean(), "seconds": time.perf_counter() - t0})
+results = pd.DataFrame(rows).set_index("model")
+best_auc = results["AUC"].idxmax()
+```
+
+Logistic regression is not the only way to get $\hat p$. Every classifier is trying to approximate the same ideal: if we knew the true probability of cancelling for each kind of booking, we would just predict the likelier class (or apply the cost threshold). That ideal is called the **Bayes classifier**, and the methods differ in how they approximate it.
+
+There are two broad strategies. **Discriminative** methods model $\Pr(\text{cancel} \mid x)$ directly. Logistic regression is one. **K-nearest neighbours**, from Chapter 9, is another: $\hat p$ is the share of cancellations among the $k$ most similar training bookings. **Generative** methods instead model what each class *looks like* (what do cancelling bookings look like, and what do kept ones look like?) and then use Bayes' rule to ask which profile a new booking resembles more, given that `{python} f"{cancel_rate:.0%}"` of bookings cancel.
+
+- **Linear discriminant analysis (LDA)** assumes that within each class the features follow a bell curve, with the same spread in both classes. Its boundary is a straight line, like logistic regression's. Altman's (1968) Z-score for predicting corporate bankruptcy is an LDA, so this one has a long history in finance.
+- **Naive Bayes** assumes the features are independent of one another within each class, so it can multiply the evidence from each feature separately. That is almost never true, but it makes the method fast and easy to scale to thousands of features. It is the classic spam filter, and it works well on word counts.
+
+Which is best? There is no general answer: each assumption is right in some worlds and wrong in others, which is why you cross-validate rather than argue. Here they are on the hotel data, each trained on the same 20,000-booking subsample (KNN is slow to predict on large data) and scored on the full test set:
+
+```{python}
+#| echo: false
+print(results.drop(columns="seconds").round(3).to_string())
+```
+
+```{python}
+#| echo: false
+#| fig-cap: "ROC and reliability curves for the four classifiers on the test bookings."
+fig, ax = plt.subplots(1, 2, figsize=(10, 4.2))
+for (name, p), c in zip(probs.items(), [GARNET, BLUE, "#e69f00", GREY]):
+    f_, t_, _ = roc_curve(y_test, p)
+    ax[0].plot(f_, t_, color=c, lw=2, label=f"{name} (AUC {roc_auc_score(y_test, p):.2f})")
+    fr_, mp_ = calibration_curve(y_test, p, n_bins=10, strategy="quantile")
+    ax[1].plot(mp_, fr_, "o-", color=c, lw=1.8, ms=4, label=name)
+ax[0].plot([0, 1], [0, 1], ls="--", color="lightgrey")
+ax[1].plot([0, 1], [0, 1], ls="--", color="lightgrey", label="perfectly honest")
+ax[0].set(xlabel="False positive rate", ylabel="True positive rate", title="Ranking: ROC curves")
+ax[1].set(xlabel="Predicted Pr(cancel), binned", ylabel="Share that actually cancelled",
+          title="Honesty: reliability curves")
+for a in ax: a.legend(frameon=False, fontsize=8)
+plt.tight_layout(); plt.show()
+```
+
+Three things to read off.
+
+**KNN ranks best.** `{python} best_auc` has the highest AUC, `{python} f"{results.loc[best_auc, 'AUC']:.3f}"`, a little ahead of logistic regression at `{python} f"{results.loc['Logistic', 'AUC']:.3f}"`. With tens of thousands of bookings, a flexible method that makes no assumption about the shape of the boundary can afford to follow the data.
+
+**LDA and logistic regression are close.** Both draw straight boundaries; they differ only in how they estimate them. LDA's AUC is `{python} f"{results.loc['LDA', 'AUC']:.3f}"`.
+
+**Naive Bayes ranks worst and lies about its probabilities.** Its Brier score, `{python} f"{results.loc['Naive Bayes', 'Brier']:.3f}"`, is worse than predicting the base rate for everyone. Look at its reliability curve: it hugs the edges. Because it treats correlated features (weekend nights and week nights, adults and children) as independent pieces of evidence, it counts the same evidence twice and becomes far too sure of itself, pushing its $\hat p$s towards 0 and 1.
+
+A reasonable conclusion for the hotel: start with logistic regression, which ranks nearly as well as the best, gives honest probabilities without fuss, fits in a second on the full data, and can be explained to a manager. Try a flexible model as a check. Chapters 13 to 15 add support vector machines, trees and boosting, which are often stronger still on data like these.
+
+### Worked example — the cautious classifier
+
+At the 0.5 threshold, Naive Bayes has the *highest* precision in the table, `{python} f"{results.loc['Naive Bayes', 'precision']:.0%}"`, and by far the lowest recall, `{python} f"{results.loc['Naive Bayes', 'recall']:.0%}"`. Is it the best model for a hotel that cares most about precision?
+
+### Solution
+
+No. Look at the share of bookings each model flags: Naive Bayes flags `{python} f"{results.loc['Naive Bayes', 'flagged']:.0%}"`, logistic regression `{python} f"{results.loc['Logistic', 'flagged']:.0%}"`. Naive Bayes is simply flagging fewer bookings, only the most obvious ones, so of course a larger share of its flags are right. High precision at one threshold says as much about where the threshold sits as about the model.
+
+The fair comparison is at the *same* operating point, which is exactly what the ROC curve shows. Logistic regression's curve lies above Naive Bayes's everywhere, so if you raised logistic regression's threshold until it flagged as few bookings as Naive Bayes, it would be at least as precise. Compare models by AUC or by cost at their own best thresholds, never by precision at a single shared threshold.
+
+## Who gets walked?
+
+```{python}
+#| echo: false
+te = X_test.assign(canceled=y_test.values, resell=p_test_fit > best_t)
+def rates(g):
+    show = g["canceled"] == 0
+    return pd.Series({"bookings": len(g), "cancel rate": g["canceled"].mean(),
+                      "share resold": g["resell"].mean(),
+                      "walked (of those who show up)": g.loc[show, "resell"].mean(),
+                      "missed (of those who cancel)": 1 - g.loc[~show, "resell"].mean()})
+fair = te.groupby("domestic")[["canceled", "resell"]].apply(rates)
+fair.index = fair.index.map({0: "international", 1: "domestic (Portugal)"}).rename("guests")
+dom, intl = fair.loc["domestic (Portugal)"], fair.loc["international"]
+nonref_share = (X_test.loc[te["resell"].values, "deposit_type"] == "Non Refund").mean()
+```
+
+The model does not use anyone's name, but it does use where they come from. So ask the question any regulator, journalist or guest would: **who bears the cost of the mistakes?** Here are the error rates at the cost-based threshold, for guests from Portugal and from abroad:
+
+```{python}
+#| echo: false
+print(fair.to_string(formatters={"bookings": "{:,.0f}".format}, float_format="{:.3f}".format))
+```
+
+The difference is stark. Domestic bookings cancel far more often in these data, `{python} f"{dom['cancel rate']:.0%}"` against `{python} f"{intl['cancel rate']:.0%}"`, so the model gives them higher $\hat p$s and resells their rooms far more often. The result is that a Portuguese guest who *does* turn up is walked `{python} f"{dom['walked (of those who show up)']:.1%}"` of the time, against `{python} f"{intl['walked (of those who show up)']:.2%}"` for an international guest: about `{python} f"{dom['walked (of those who show up)'] / intl['walked (of those who show up)']:.0f}"` times as often. Meanwhile almost every international cancellation goes unnoticed (`{python} f"{intl['missed (of those who cancel)']:.0%}"` missed).
+
+Is the model "unfair"? It is calibrated and it applies the same threshold to everyone. Dropping the `domestic` column narrows the gap but does not close it (Exercise 6), because deposit type, lead time and market segment carry some of the same information. (`{python} f"{nonref_share:.0%}"` of the bookings it resells are on non-refundable rates, which cancel at a startling rate in these data; `{python} f"{(hotels.loc[hotels['deposit_type'] == 'Non Refund', 'country'] == 'PRT').mean():.0%}"` of non-refundable bookings are by guests from Portugal.) It is doing exactly what we asked. And still, the burden of its mistakes falls almost entirely on one group.
+
+That is not a bug that better engineering will remove. When two groups have different base rates, no model short of a perfect one can be calibrated within each group *and* give the groups equal false positive rates *and* equal false negative rates. Kleinberg, Mullainathan and Raghavan (2017) prove it, and Chouldechova (2017) shows the same thing for criminal risk scores. You have to choose which kind of equality you care about, and the choice is about values, not statistics. Fuster, Goldsmith-Pinkham, Ramadorai and Walther (2022) find the same pattern in US mortgage lending, where more flexible machine-learning credit models help some groups of borrowers more than others without ever using group membership directly.
+
+For a hotel the stakes are a ruined evening. For a bank turning down a loan, a court setting bail or a programme choosing whom to train, they are much larger. Whatever the setting, the habit is the same: **report error rates by group** alongside the overall numbers.
+
+### Worked example — whose cost is in the matrix?
+
+The \$300 cost of walking a guest was the hotel's cost: the other room, the taxi. An international guest who is walked may lose more than a local one (no car, an unfamiliar city, a missed connection). Should the hotel use a different threshold for international guests?
+
+### Solution
+
+There is a case either way, and writing it down is the point.
+
+*For*: if walking an international guest really costs the hotel more (worse reviews, lost repeat business), then the cost-based threshold for that group is higher, by the same formula. Here that would mean reselling international rooms even less often, which barely changes anything, since the model hardly ever resells them now.
+
+*Against*: a group-specific threshold treats guests differently because of where they come from, which is uncomfortable and in some markets unlawful. And the cost matrix only counts the hotel's own costs. The guest's lost evening is not in it. If the hotel, or a regulator, decided that a walked guest's cost counts too, *every* threshold would rise.
+
+The general lesson: a cost matrix is a statement about whose costs count. Writing it down makes that choice visible, which is better than hiding it inside "we used 0.5".
+
+## In Python
+
+The whole analysis in one place, from download to a decision rule, runnable top to bottom.
+
+```{python}
+from pathlib import Path
+import numpy as np, pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import make_pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score
+SEED = 368
+
+path = Path("../data/hotels.csv")                    # download once, then reuse
+if not path.exists():
+    path.parent.mkdir(exist_ok=True)
+    pd.read_csv(URL).to_csv(path, index=False)
+hotels = pd.read_csv(path)
+```
+
+Drop the leaks and the ID-like columns, keep a domestic dummy, split with stratification.
+
+```{python}
+LEAKS = ["reservation_status", "reservation_status_date", "assigned_room_type"]
+hotels["domestic"] = (hotels["country"] == "PRT").astype(int)
+X = hotels.drop(columns=["is_canceled"] + LEAKS + ["agent", "company", "country"])
+y = hotels["is_canceled"]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=SEED)
+num = X.select_dtypes("number").columns.tolist()
+cat = X.select_dtypes(exclude="number").columns.tolist()
+prep = ColumnTransformer([
+    ("num", make_pipeline(SimpleImputer(strategy="median"), StandardScaler()), num),
+    ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), cat)])
+```
+
+Choose the threshold on a validation set carved from the training data.
+
+```{python}
+X_fit, X_val, y_fit, y_val = train_test_split(X_train, y_train, test_size=0.25,
+                                              stratify=y_train, random_state=SEED)
+model = make_pipeline(prep, LogisticRegression(max_iter=1000)).fit(X_fit, y_fit)
+
+def avg_cost(t, p, y_true, walk=300, empty=100):
+    resell, y_true = p > t, np.asarray(y_true)
+    return (walk * (resell & (y_true == 0)) + empty * (~resell & (y_true == 1))).mean()
+
+grid = np.linspace(0.05, 0.95, 91)
+p_val = model.predict_proba(X_val)[:, 1]
+t_star = grid[np.argmin([avg_cost(t, p_val, y_val) for t in grid])]
+```
+
+Then score once on the test set.
+
+```{python}
+p = model.predict_proba(X_test)[:, 1]
+print(f"AUC {roc_auc_score(y_test, p):.3f} | threshold {t_star:.2f}")
+print(f"precision {precision_score(y_test, p > t_star):.3f} | recall {recall_score(y_test, p > t_star):.3f}")
+print(f"cost per booking: ${avg_cost(t_star, p, y_test):.2f} vs ${avg_cost(0.5, p, y_test):.2f} at 0.5")
+```
+
+## What goes wrong
+
+**Judging by accuracy alone.** With a `{python} f"{cancel_rate:.0%}"` base rate, "nobody cancels" is already `{python} f"{acc_nobody:.0%}"` accurate; with fraud it is 99.9%. Always put the base rate next to the accuracy, and look at the confusion matrix.
+
+**Leaving in a feature recorded after the outcome.** `reservation_status` gives `{python} f"{leak_acc:.0%}"` accuracy and is useless. A held-out test set does not catch leakage, because the leak is in the test set too. Ask of every column: would I know this when I decide?
+
+**Using 0.5 because it is the default.** 0.5 is the right threshold only when both mistakes cost the same, which is almost never. Write down the cost matrix, compute $c_{FP}/(c_{FP} + c_{FN})$, and check it on validation data.
+
+**Choosing the threshold on the test set.** The threshold is a hyperparameter like any other. Pick it on validation data or by cross-validation, then test once.
+
+**Trusting probabilities that have not been checked.** A model can rank well and still be miscalibrated, and Naive Bayes on these data is the example. If $\hat p$ feeds a cost calculation, a price or a forecast, draw the reliability curve first.
+
+**Reading the coefficients as causal.** Non-refundable bookings cancel at `{python} f"{hotels.loc[hotels['deposit_type'] == 'Non Refund', 'is_canceled'].mean():.0%}"` in these data, and the model leans on that heavily. That does not mean non-refundable rates *cause* cancellations; it almost certainly reflects who books them: `{python} f"{hotels.loc[hotels['deposit_type'] == 'Non Refund', 'market_segment'].isin(['Groups', 'Offline TA/TO']).mean():.0%}"` of non-refundable bookings come through group sales or offline travel agents and tour operators, who block rooms and release the ones they cannot sell. Abolish the rate and those bookings would not turn into reliable guests.
+
+## Exercises
+
+1. A model gives a booking $\hat p = 0.8$. Which of these is right? (a) This guest will cancel. (b) Among many bookings like this one, about 80% cancel. (c) The model is 80% accurate. (d) The odds of cancelling are 0.8. Explain what is wrong with each of the others.
+
+2. A credit-card company says a missed fraud costs it \$500 and a false alarm (a blocked legitimate purchase and an annoyed customer) costs \$10. What threshold on $\hat p$ should it use to block transactions? Is it above or below 0.5, and why does that make sense?
+
+3. Compute the confusion matrix, precision and recall of the logistic regression at the cost-based threshold, on the test set. Compare them with the 0.5 threshold. Which moved, and in which direction?
+
+4. Compare the City Hotel and the Resort Hotel: fit the logistic regression on the full training data and report the test AUC separately for each hotel. Is the model better at ranking bookings at one than the other?
+
+5. Recalibrate Naive Bayes: wrap `GaussianNB()` in `CalibratedClassifierCV(..., method="isotonic", cv=5)`, fit it on the 20,000-booking subsample, and compare its Brier score and AUC on the test set with plain Naive Bayes. Which number changed, and why did the other barely move?
+
+6. The fairness table showed that domestic guests who show up are walked far more often. Suppose the hotel drops the `domestic` column from the model. Predict what happens to the gap, then check it.
+
+7. Make a **time split**: train on arrivals in 2015 and 2016 and test on 2017 (column `arrival_date_year`), dropping `arrival_date_year` from the features. How does the AUC compare with the random split? What does that tell you about deploying the model?
+
+### Answers
+
+**1.** (b). A probability is a statement about many similar cases, not a promise about one. (a) confuses a probability with a decision; the decision comes only after a threshold is chosen. (c) confuses one prediction with the model's overall accuracy. (d) confuses odds with probability: the odds are $0.8/0.2 = 4$.
+
+**2.** Block when $\hat p > 10/(10 + 500) \approx 0.02$. That is far *below* 0.5: a missed fraud is fifty times as costly as a false alarm, so the company should block even when fraud is unlikely. It is the hotel's logic run the other way. There the expensive mistake was acting (walking a guest), so the bar for acting was high; here the expensive mistake is not acting, so the bar is low.
+
+**3.**
+
+These use `p`, from the model fitted in the In Python section on the slightly smaller `X_fit`, so the 0.5 numbers differ a little from those earlier in the chapter.
+
+```{python}
+from sklearn.metrics import confusion_matrix
+for t in [0.5, t_star]:
+    print(f"threshold {t:.2f}: precision {precision_score(y_test, p > t):.3f}, "
+          f"recall {recall_score(y_test, p > t):.3f}")
+    print(confusion_matrix(y_test, p > t))
+```
+
+```{python}
+#| echo: false
+prec_s, rec_s = precision_score(y_test, p > t_star), recall_score(y_test, p > t_star)
+prec_h, rec_h = precision_score(y_test, p > 0.5), recall_score(y_test, p > 0.5)
+```
+
+Raising the threshold from 0.5 to `{python} f"{t_star:.2f}"` pushes precision up from `{python} f"{prec_h:.1%}"` to `{python} f"{prec_s:.1%}"` and recall down from `{python} f"{rec_h:.0%}"` to `{python} f"{rec_s:.0%}"`. The hotel resells far fewer rooms, catches fewer cancellations, and almost never walks a guest. That is the right trade when walking is the expensive mistake.
+
+**4.**
+
+```{python}
+auc_by_hotel = {h: roc_auc_score(y_test[X_test["hotel"] == h], p[(X_test["hotel"] == h).values])
+                for h in X_test["hotel"].unique()}
+print({h: round(a, 3) for h, a in auc_by_hotel.items()})
+```
+
+The test AUC is `{python} f"{auc_by_hotel['City Hotel']:.3f}"` at the City Hotel and `{python} f"{auc_by_hotel['Resort Hotel']:.3f}"` at the Resort Hotel. The model ranks bookings `{python} "better" if auc_by_hotel["City Hotel"] > auc_by_hotel["Resort Hotel"] else "worse"` at the City Hotel. Neither number is the AUC of the whole test set, which also gets credit for knowing that city bookings cancel more often than resort ones (`{python} f"{rate_by_hotel['City Hotel']:.0%}"` against `{python} f"{rate_by_hotel['Resort Hotel']:.0%}"`).
+
+**5.**
+
+```{python}
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import brier_score_loss
+from sklearn.base import clone
+nb_cal = make_pipeline(clone(prep), CalibratedClassifierCV(GaussianNB(), method="isotonic", cv=5))
+p_cal = nb_cal.fit(X_small, y_small).predict_proba(X_test)[:, 1]
+print(round(brier_score_loss(y_test, p_cal), 3), round(roc_auc_score(y_test, p_cal), 3))
+```
+
+```{python}
+#| echo: false
+brier_cal, auc_cal = brier_score_loss(y_test, p_cal), roc_auc_score(y_test, p_cal)
+```
+
+The Brier score improves from `{python} f"{results.loc['Naive Bayes', 'Brier']:.3f}"` to `{python} f"{brier_cal:.3f}"`. The AUC moves only from `{python} f"{results.loc['Naive Bayes', 'AUC']:.3f}"` to `{python} f"{auc_cal:.3f}"`. Recalibration is a monotone relabelling of the scores: it changes what each score *means* as a probability but (apart from ties and the averaging across folds) not the order of the bookings, and AUC depends only on the order.
+
+**6.**
+
+```{python}
+X_tr_nd, X_te_nd = X_fit.drop(columns="domestic"), X_test.drop(columns="domestic")   # same data as `model`
+prep_nd = ColumnTransformer([
+    ("num", make_pipeline(SimpleImputer(strategy="median"), StandardScaler()),
+     [c for c in num if c != "domestic"]),
+    ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), cat)])
+p_nd = make_pipeline(prep_nd, LogisticRegression(max_iter=1000)).fit(X_tr_nd, y_fit).predict_proba(X_te_nd)[:, 1]
+walked = pd.Series(p_nd > t_star)[y_test.values == 0].groupby(X_test["domestic"].values[y_test.values == 0]).mean()
+cost_nd = avg_cost(t_star, p_nd, y_test)
+```
+
+```{python}
+#| echo: false
+ratio_with = dom['walked (of those who show up)'] / intl['walked (of those who show up)']
+ratio_without = walked.loc[1] / walked.loc[0]
+```
+
+Without the column, a domestic guest who shows up is walked `{python} f"{walked.loc[1]:.1%}"` of the time and an international guest `{python} f"{walked.loc[0]:.2%}"`. The ratio falls from about `{python} f"{ratio_with:.0f}"` to about `{python} f"{ratio_without:.0f}"`: the column was doing a lot of the work, but not all of it. Deposit type, market segment, lead time and the other features are partial **proxies** for where a guest comes from, so a gap remains.
+
+It is not free. The average cost per booking at the same threshold rises from \$`{python} f"{avg_cost(t_star, p, y_test):.2f}"` to \$`{python} f"{cost_nd:.2f}"`, because the model has lost real information. That is the trade-off stated in dollars: the hotel can buy a smaller gap in who gets walked for about \$`{python} f"{200 * (cost_nd - avg_cost(t_star, p, y_test)):,.0f}"` a night on 200 rooms. Whether that is worth it is the hotel's call (or a regulator's), but now it is a call made with the number in front of you.
+
+**7.**
+
+```{python}
+tr, te_ = X["arrival_date_year"] <= 2016, X["arrival_date_year"] == 2017
+Xt = X.drop(columns="arrival_date_year")
+prep_t = ColumnTransformer([
+    ("num", make_pipeline(SimpleImputer(strategy="median"), StandardScaler()),
+     [c for c in num if c != "arrival_date_year"]),
+    ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), cat)])
+m_t = make_pipeline(prep_t, LogisticRegression(max_iter=1000)).fit(Xt[tr], y[tr])
+auc_time = roc_auc_score(y[te_], m_t.predict_proba(Xt[te_])[:, 1])
+```
+
+Trained on `{python} f"{tr.sum():,}"` bookings from 2015–2016 and tested on `{python} f"{te_.sum():,}"` from 2017, the AUC is `{python} f"{auc_time:.3f}"`, against `{python} f"{auc_logit:.3f}"` for the random split. `{python} "It is lower" if auc_time < auc_logit else "It is not lower"`: a random split lets the model learn from bookings made in the same weeks as the ones it is tested on, which is a luxury a hotel deploying the model never has. The time split is the honest estimate of how the model will do next season.
+
+**Reading.** Géron, ch. 3, for more on precision–recall trade-offs, multiclass classification and error analysis, and ch. 4 for the logistic regression section. ISLP (James, Witten, Hastie, Tibshirani & Taylor 2023), ch. 4, for logistic regression, LDA, QDA and Naive Bayes side by side. Kleinberg, Mullainathan & Raghavan (2017), "Inherent Trade-Offs in the Fair Determination of Risk Scores", for the fairness result.
