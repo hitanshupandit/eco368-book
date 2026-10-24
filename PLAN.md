@@ -27,7 +27,8 @@ Students read Géron, *Hands-On Machine Learning with Scikit-Learn and PyTorch* 
 3. **Economics first.** Every method opens with an economic question and closes with what an economist would do with the answer.
 4. **Python appears as it is taught.** pandas, scikit-learn, statsmodels and PyTorch, in the style of the work-through notebooks. No library a student has not installed.
 5. **Written in the first person**, like the lecture notes, not as a reference work.
-6. **Undergraduate level.** At most one key equation per idea; derivations go in a short *Going further* box at the end of a section.
+6. **Economics reading in every chapter.** 2–3 real papers (verified against Crossref; JEP and other accessible articles preferred) showing economists using the method, each with a question that makes students think about the economics, not just the code.
+7. **Undergraduate level.** At most one key equation per idea; derivations go in a short *Going further* box at the end of a section.
 
 ## Chapter template
 
@@ -41,6 +42,7 @@ Students read Géron, *Hands-On Machine Learning with Scikit-Learn and PyTorch* 
 ## What goes wrong  the 4–6 mistakes students actually make
 ## Exercises        5–8 problems, a mix of interpretation and code
 ### Answers         worked answers, computed
+## Economics reading  2–3 published papers that use the chapter's method, each with what they did and a "Think about" question
 ```
 
 ## Table of contents

@@ -713,4 +713,26 @@ second_year = np.mean(np.array(seconds) == "year")
 
 The first split is on `sqft` in `{python} f"{first_sqft:.0%}"` of the bootstrap trees, and `{python} f"{second_year:.0%}"` of the second-level splits are on `year` (in these trees, the smaller-flat branch always asks about the year and the larger-flat branch about size again). With `{python} f"{len(X_train):,}"` listings, the top of the tree is stable: size first, then the year, is a robust feature of these data. What varies is the cutpoints and everything further down, where leaves are small, as the bootstrap predictions for the Mission flat showed. Trust the top of a tree fitted to lots of data; distrust the twigs.
 
+## Economics reading
+
+Trees entered economics as easy-to-explain predictors and stayed as building blocks for policy prediction and for causal methods.
+
+**Varian, H. R. (2014). "Big Data: New Tricks for Econometrics." *Journal of Economic Perspectives* 28(2): 3–28.** [doi.org/10.1257/jep.28.2.3](https://doi.org/10.1257/jep.28.2.3)
+
+Google's chief economist introduces economists to the machine learner's toolbox: train and test splits, cross-validation, classification and regression trees, forests, the LASSO and Bayesian methods for forecasting. His tree examples are small enough to read in a glance, which is the selling point of this chapter, and he is candid that the methods are built for prediction and need extra work before they say anything causal.
+
+*Think about:* the housing office wants to show a landlord a three-level tree to justify a voucher. What does the landlord learn from the tree, what does the tree hide about how the number was really produced, and is a simple, slightly worse rule worth the loss in accuracy here?
+
+**Kleinberg, J., Lakkaraju, H., Leskovec, J., Ludwig, J. & Mullainathan, S. (2018). "Human Decisions and Machine Predictions." *Quarterly Journal of Economics* 133(1): 237–293.** [doi.org/10.1093/qje/qjx032](https://doi.org/10.1093/qje/qjx032)
+
+Judges in New York City decide whether people awaiting trial are released or held, and the decision rests on a prediction: will this person flee or commit a crime? The authors train a tree-based model on past cases and find that it could, in principle, reduce crime at the same jailing rate, or jail far fewer people at the same crime rate. The hard part is evaluation: you only see outcomes for people the judges released, so they use the fact that defendants are assigned to judges who differ in leniency.
+
+*Think about:* this "selective labels" problem has an analogue in our rent data, which contain only flats that were advertised and rented. Which flats are missing, and why might a tree trained on advertised flats misprice the ones a housing office most needs to price?
+
+**Athey, S. & Imbens, G. (2016). "Recursive partitioning for heterogeneous causal effects." *Proceedings of the National Academy of Sciences* 113(27): 7353–7360.** [doi.org/10.1073/pnas.1510489113](https://doi.org/10.1073/pnas.1510489113)
+
+A tree splits the data into groups whose outcomes differ. Athey and Imbens adapt that idea to find groups whose *treatment effects* differ, in data from a randomized experiment. Their "causal tree" chooses splits to separate people who respond strongly from those who respond weakly, and uses one part of the sample to choose the splits and another to estimate the effects in each leaf, so that the confidence intervals are honest.
+
+*Think about:* why can a tree that predicts rents never tell you the effect of adding a bedroom, while a tree grown on experimental data can tell you who responds most to a treatment? What does randomization supply that the Craigslist listings do not?
+
 **Reading.** Géron, ch. 5, for decision trees, including the CART training algorithm, Gini impurity and entropy, and regularization hyperparameters. ISLP (James, Witten, Hastie, Tibshirani & Taylor 2023), ch. 8.1, for regression and classification trees and cost-complexity pruning. Breiman, Friedman, Olshen & Stone (1984), *Classification and Regression Trees*, for the original. Kleinberg, Lakkaraju, Leskovec, Ludwig & Mullainathan (2018), "Human Decisions and Machine Predictions", *Quarterly Journal of Economics*, for tree-based prediction in a policy setting.

@@ -10,17 +10,21 @@ Hitanshu Pandit · Department of Economics
 
 Use it for three things: to **read** the week's material before Monday, to **run** the code (every block works in the course environment or Google Colab), and to work the **exercises** at the end of each chapter. Géron is where you go for the fuller treatment and more engineering detail; this is where you go for how we did it in class.
 
-Chapters are published as we reach them.
-
-## Out now
+## Contents
 
 | | Chapter | Covers |
 |---|---|---|
+| | **Part I — Tools for economic data** | |
+| 1 | [What data science is for](01_what_data_science_is_for.md) | description, prediction and causation; what "big" data changes |
+| 2 | [Python for economists](02_python_for_economists.md) | types, lists and dictionaries, functions, NumPy, a regression by hand |
+| 3 | [Reproducible projects with Git](03_reproducible_projects.md) | folders, scripts, paths, commits, branches, pull requests |
 | 4 | [Wrangling, bigger data, and pictures](04_wrangling_and_pictures.md) | tidy data, pandas verbs, merges, **missing values**, Parquet/DuckDB, charts that inform |
 | 5 | [Mapping opportunity](05_mapping_opportunity.md) | the Opportunity Atlas, rank-rank mobility, geopandas, choropleths |
 | 6 | [Getting data from the web](06_data_from_the_web.md) | HTTP, JSON, APIs and keys, HTML and scraping, the ethics |
+| | **Part II — Experiments and uncertainty** | |
 | 7 | [A/B tests](07_ab_tests.md) | randomization, difference in means, power, CUPED, peeking, many metrics |
 | 8 | [Resampling: simulation and the bootstrap](08_resampling.md) | Monte Carlo, coverage, the bootstrap, permutation tests |
+| | **Part III — Machine learning** | |
 | 9 | [An end-to-end machine learning project](09_end_to_end_project.md) | the landscape, train/test, pipelines, cross-validation, the test set is sacred |
 | 10 | [Training linear models](10_training_linear_models.md) | OLS as a predictor, gradient descent, polynomials and splines, learning curves |
 | 11 | [Regularization and model selection](11_regularization.md) | ridge, LASSO, elastic net, choosing the penalty by cross-validation |
@@ -29,8 +33,14 @@ Chapters are published as we reach them.
 | 14 | [Decision trees](14_decision_trees.md) | splits, impurity, depth, why trees overfit |
 | 15 | [Ensembles: forests and boosting](15_ensembles.md) | bagging, random forests, gradient boosting, importance and SHAP |
 | 16 | [Dimensionality reduction](16_dimensionality_reduction.md) | the curse of dimensionality, PCA, a development index |
+| 17 | [Clustering](17_clustering.md) | k-means, choosing k, hierarchical clustering, Gaussian mixtures |
+| 18 | [Neural networks](18_neural_networks.md) | from logit to a neuron, backpropagation, training, when nets lose to trees |
+| | **Part IV — Language** | |
+| 19 | [Text as data](19_text_as_data.md) | regex, bag of words, tf-idf, dictionaries, text regression |
+| 20 | [Embeddings and topic models](20_embeddings_and_topics.md) | topic models, word and sentence embeddings, similarity |
+| 21 | [Transformers, LLMs, and how they are told to behave](21_transformers_and_llms.md) | attention, pretraining and fine-tuning, constitutions, LLMs as annotators |
 
-**Coming:** 1. What data science is for · 2. Python for economists · 3. Reproducible projects with Git · 17. Clustering · 18. Neural networks · 19. Text as data · 20. Embeddings and topic models · 21. Transformers, LLMs, and how they are told to behave
+Every chapter ends with **Economics reading**: published papers in which economists use the chapter's method, each with a question to think about.
 
 ## How to read it
 

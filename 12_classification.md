@@ -502,4 +502,20 @@ auc_time = roc_auc_score(y[te_], m_t.predict_proba(Xt[te_])[:, 1])
 
 Trained on 78,703 bookings from 2015–2016 and tested on 40,687 from 2017, the AUC is 0.851, against 0.889 for the random split. It is lower: a random split lets the model learn from bookings made in the same weeks as the ones it is tested on, which is a luxury a hotel deploying the model never has. The time split is the honest estimate of how the model will do next season.
 
+## Economics reading
+
+Classifiers now decide who gets credit and who gets medical care. These two papers ask the chapter’s last question, who bears the cost of the mistakes, with higher stakes than a hotel room.
+
+**Fuster, A., Goldsmith-Pinkham, P., Ramadorai, T. & Walther, A. (2022). “Predictably Unequal? The Effects of Machine Learning on Credit Markets.” *Journal of Finance* 77(1): 5–47.** [doi.org/10.1111/jofi.13090](https://doi.org/10.1111/jofi.13090)
+
+The authors compare a logistic-regression model of mortgage default with a more flexible machine-learning model, using US mortgage data. The flexible model predicts better overall, but its gains are not shared equally: white and Asian borrowers are more likely to come out ahead under it, and Black and Hispanic borrowers less likely. Part of the reason is that a flexible model can reconstruct group membership from other variables even when race is not an input.
+
+*Think about:* in this chapter, dropping the `domestic` column narrowed the gap between Portuguese and foreign guests but did not close it. Explain why in the language of this paper, and say whether a lender (or a hotel) should be judged by its inputs or by its error rates across groups.
+
+**Obermeyer, Z., Powers, B., Vogeli, C. & Mullainathan, S. (2019). “Dissecting racial bias in an algorithm used to manage the health of populations.” *Science* 366(6464): 447–453.** [doi.org/10.1126/science.aax2342](https://doi.org/10.1126/science.aax2342)
+
+A widely used commercial algorithm chose patients for extra care by predicting their future health costs. It predicted costs accurately, for Black and white patients alike. The problem was the target: because less is spent on Black patients with the same health needs, Black patients with a given risk score were sicker than white patients with the same score. Retraining on a direct measure of health instead of cost greatly reduced the disparity.
+
+*Think about:* the hotel model is well calibrated for `is_canceled`. Is cancellation the outcome the hotel actually cares about, or a proxy for something else, such as lost revenue or a lost repeat customer? Describe a case in which predicting the label perfectly would still lead to bad decisions.
+
 **Reading.** Géron, ch. 3, for more on precision–recall trade-offs, multiclass classification and error analysis, and ch. 4 for the logistic regression section. ISLP (James, Witten, Hastie, Tibshirani & Taylor 2023), ch. 4, for logistic regression, LDA, QDA and Naive Bayes side by side. Kleinberg, Mullainathan & Raghavan (2017), “Inherent Trade-Offs in the Fair Determination of Risk Scores”, for the fairness result.

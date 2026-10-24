@@ -170,7 +170,7 @@ hgb = HistGradientBoostingRegressor(max_iter=2000, learning_rate=0.1, early_stop
                                     n_iter_no_change=20, random_state=368).fit(Z_train, y_train)
 ```
 
-It stopped after 433 trees, in 3.2 seconds, with a test RMSE of \$589: the best number in this book so far.
+It stopped after 433 trees, in 5.2 seconds, with a test RMSE of \$589: the best number in this book so far.
 
 ### Worked example — slower learning, more trees
 
@@ -198,7 +198,7 @@ rsearch = RandomizedSearchCV(HistGradientBoostingRegressor(max_iter=1000, early_
                              space, n_iter=12, cv=3, scoring="neg_root_mean_squared_error").fit(Z_train, y_train)
 ```
 
-`loguniform(0.02, 0.3)` draws learning rates evenly on a log scale, so 0.02 to 0.03 is as likely as 0.2 to 0.3, which is right for a parameter whose effect depends on its order of magnitude. Twelve draws with 3-fold cross-validation took 10 seconds.
+`loguniform(0.02, 0.3)` draws learning rates evenly on a log scale, so 0.02 to 0.03 is as likely as 0.2 to 0.3, which is right for a parameter whose effect depends on its order of magnitude. Twelve draws with 3-fold cross-validation took 13 seconds.
 
 The best draw has a cross-validated RMSE of \$625; the default settings, cross-validated the same way, score \$622. Tuning bought essentially nothing. That is a common and useful finding. scikit-learn’s boosting defaults are good, early stopping already chooses the most important hyperparameter, and on six features there is not much structure left for clever settings to find. Tune briefly, check that the defaults are not far off, and spend your effort on features instead.
 
@@ -508,5 +508,27 @@ print(noise_tab.round(1))
     noise               6.1              0.1
 
 The boosting model’s mean absolute SHAP value for the noise column is \$6.1, against \$34 for the least important real feature, and its permutation importance is +0.1 dollars. The boosting model is less fooled because its trees are small and early stopping halts it before it starts fitting noise, so it rarely has a reason to split on the noise column at all. SHAP faithfully reports how the model uses each feature: if a model had leaned on noise, SHAP would show it. It is a tool for describing a model, good or bad, not for certifying that the model learned something true.
+
+## Economics reading
+
+Ensembles are the workhorse predictors in empirical finance and in the economics of decisions. These papers use them and show what it takes to get from a good forecast to an economic conclusion.
+
+**Gu, S., Kelly, B. & Xiu, D. (2020). “Empirical Asset Pricing via Machine Learning.” *Review of Financial Studies* 33(5): 2223–2273.** [doi.org/10.1093/rfs/hhaa009](https://doi.org/10.1093/rfs/hhaa009)
+
+Can you predict which stocks will do well next month from a long list of firm characteristics and economic conditions? The authors run a horse race among linear regression, penalised regression, random forests, boosted trees and neural networks. The flexible methods, trees and networks among them, predict better than linear models, largely because they capture interactions among predictors, and the most useful predictors are measures of recent price trends, liquidity and volatility.
+
+*Think about:* a rent model that predicts well can go on predicting well. A model that predicts stock returns well is a profit opportunity that other investors will try to exploit. Why might its edge shrink once it is published, and why does that make the economics of prediction different in asset markets?
+
+**Wager, S. & Athey, S. (2018). “Estimation and Inference of Heterogeneous Treatment Effects using Random Forests.” *Journal of the American Statistical Association* 113(523): 1228–1242.** [doi.org/10.1080/01621459.2017.1319839](https://doi.org/10.1080/01621459.2017.1319839)
+
+The “causal forest” adapts the random forest of this chapter to estimate how a treatment effect varies from person to person, and to give a valid confidence interval for each estimate. Its trees are “honest”: one subsample decides where to split and a different one estimates the effect in each leaf. It has become a standard tool for asking who gains most from a programme or an intervention.
+
+*Think about:* the chapter warns that SHAP values and partial dependence describe how the rent forest uses a feature, not what changing the feature would do. What does a causal forest need from the data that the rent forest does not have, and why can no amount of tuning give the rent forest that?
+
+**Mullainathan, S. & Obermeyer, Z. (2022). “Diagnosing Physician Error: A Machine Learning Approach to Low-Value Health Care.” *Quarterly Journal of Economics* 137(2): 679–727.** [doi.org/10.1093/qje/qjab046](https://doi.org/10.1093/qje/qjab046)
+
+Doctors decide whom to test for a heart attack. The authors build a flexible machine-learning model of each patient’s risk from electronic health records and compare it with doctors’ choices. Doctors test many patients the model says are very low risk, and fail to test some high-risk patients who go on to have bad outcomes, so the problem is not simply too much testing but testing the wrong people.
+
+*Think about:* to conclude that the doctors erred, rather than that they saw something the model did not, the authors must deal with information the doctor had and the data lack. How would you check that, and what is the equivalent worry if you compared the rent forest’s prices with an experienced landlord’s?
 
 **Reading.** Géron, ch. 6, for ensembles: voting, bagging and pasting, out-of-bag evaluation, random forests, boosting and stacking. ISLP (James, Witten, Hastie, Tibshirani & Taylor 2023), ch. 8.2, for bagging, random forests and boosting, with the variance argument. Breiman (2001), “Random Forests”, *Machine Learning* 45; Friedman (2001), “Greedy Function Approximation: A Gradient Boosting Machine”, *Annals of Statistics* 29. Lundberg & Lee (2017), “A Unified Approach to Interpreting Model Predictions”, *NeurIPS*, for SHAP, and Molnar, *Interpretable Machine Learning* (online), for partial dependence, ICE and their pitfalls.

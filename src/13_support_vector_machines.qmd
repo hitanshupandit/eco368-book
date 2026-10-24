@@ -801,4 +801,26 @@ walk = {n: (y_test.values[p_ > 0.75] == 0).mean() for n, p_ in [("logit", p_logi
 
 Of the rooms each model resells, `{python} f"{walk['logit']:.1%}"` (logistic) and `{python} f"{walk['svm']:.1%}"` (SVM) belong to guests who turn up and must be walked. `{python} "The SVM resells more rooms with almost the same hit rate, so it is mostly finding more of the near-certain cancellations, not gambling more: that is better ranking, which is what its higher AUC promised." if walk['svm'] <= walk['logit'] + 0.005 else "The SVM resells more rooms but walks a larger share of their guests, so part of its saving comes from taking more risk at the same threshold, which the calibration may not fully justify."`
 
+## Economics reading
+
+Support vector machines are less common in economics than in computer science, but they had their moment in text classification, and the reviews below explain where they fit among the tools an economist might use.
+
+**Antweiler, W. & Frank, M. Z. (2004). "Is All That Talk Just Noise? The Information Content of Internet Stock Message Boards." *Journal of Finance* 59(3): 1259–1294.** [doi.org/10.1111/j.1540-6261.2004.00662.x](https://doi.org/10.1111/j.1540-6261.2004.00662.x)
+
+The authors collected a very large number of messages posted on internet stock message boards about large US companies and asked whether the chatter predicts anything. They hand-labelled a sample of messages as bullish, bearish or neither, trained text classifiers (Naive Bayes, with a support vector machine as a check) to label the rest, and then related the resulting measures to stock returns, trading volume and volatility. The classifier was not the result, only a way to turn text into a variable.
+
+*Think about:* the classifier misreads some messages, sarcasm for example. When a mislabelled "bullishness" measure is then used as a regressor, which way does the error push the estimated relationship with returns? Compare that with the hotel, where the classifier's errors are the final decision.
+
+**Gentzkow, M., Kelly, B. & Taddy, M. (2019). "Text as Data." *Journal of Economic Literature* 57(3): 535–574.** [doi.org/10.1257/jel.20181020](https://doi.org/10.1257/jel.20181020)
+
+A survey of how economists turn documents (newspaper articles, speeches, central bank statements, product reviews) into numbers and use them. It covers how to represent text, how to reduce its huge number of features, and which supervised methods work when there are far more words than documents, a setting where regularised linear classifiers, the family that linear SVMs belong to, tend to do well. Applications range from measuring policy uncertainty to media slant.
+
+*Think about:* text gives you tens of thousands of features and perhaps a few thousand labelled documents. Why does that setting favour a linear boundary with a penalty over a flexible kernel, and how does it relate to the chapter's section on linear SVMs for big data?
+
+**Athey, S. & Imbens, G. W. (2019). "Machine Learning Methods That Economists Should Know About." *Annual Review of Economics* 11(1): 685–725.** [doi.org/10.1146/annurev-economics-080217-053433](https://doi.org/10.1146/annurev-economics-080217-053433)
+
+A guided tour, for economists, of the main supervised and unsupervised learning methods, with attention to what they are good at and how they can be adapted to the questions economists care about: causal effects, policy evaluation and inference. It is a good map of where SVMs sit relative to penalised regression, trees, forests and neural networks.
+
+*Think about:* an SVM gives the hotel a score and a boundary, not a probability or an interpretable coefficient. For the resale decision, what does the hotel lose by not having an honest probability, and when (pricing an overbooking policy, explaining it to a regulator) would that loss matter?
+
 **Reading.** Géron, Appendix C, for support vector machines, including the dual problem and support vector regression. ISLP (James, Witten, Hastie, Tibshirani & Taylor 2023), ch. 9, for the maximal margin classifier, soft margins (in the budget convention) and the connection to logistic regression. Hsu, Chang & Lin, "A Practical Guide to Support Vector Classification" (National Taiwan University), for the practice of scaling and grid search. Platt (1999), "Probabilistic Outputs for Support Vector Machines", for the calibration step.

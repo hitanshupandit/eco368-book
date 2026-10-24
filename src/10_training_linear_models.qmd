@@ -723,4 +723,26 @@ It did not. Not a single listing changed sides: coverage in `{python} cov_cty.in
 
 **7.** That the number cannot carry that weight. `{python} f"{el.loc[hi_c]:.2f}"` describes how rents differ between bigger and smaller flats that exist in `{python} hi_c.title()`, and bigger flats there differ in many ways besides size: more of them are houses, with gardens and parking. An extension adds square feet and nothing else. The prediction model is useful for pricing a flat like the ones in the data; it is not an estimate of what *changing* a flat would do. That is a $\hat\beta$ question, and it needs a research design, such as comparing the same units before and after renovations.
 
+## Economics reading
+
+A rent regression has a long history in economics under another name. These papers explain what its coefficients mean, why Bay Area rents are so high, and how new data are changing the measurement of cities.
+
+**Rosen, S. (1974). "Hedonic Prices and Implicit Markets: Product Differentiation in Pure Competition." *Journal of Political Economy* 82(1): 34–55.** [doi.org/10.1086/260169](https://doi.org/10.1086/260169)
+
+The theory behind every regression of a price on product characteristics. Rosen treats a flat (or a car, or a job) as a bundle of attributes and asks what the slope of price with respect to one attribute means. His answer is that the price schedule traces out an equilibrium in which buyers with different tastes are matched with sellers who can supply different bundles. The slope at a point tells you what the marginal buyer there pays for a little more, not what any one household would pay, and not a demand curve.
+
+*Think about:* the chapter's size elasticity is a slope of this kind. Is it what a particular tenant would pay for 100 more square feet? What would happen to the slope if a wave of families with children moved into the Bay Area, and why does Rosen's view make the predictive model and the economic interpretation different things?
+
+**Glaeser, E. & Gyourko, J. (2018). "The Economic Implications of Housing Supply." *Journal of Economic Perspectives* 32(1): 3–30.** [doi.org/10.1257/jep.32.1.3](https://doi.org/10.1257/jep.32.1.3)
+
+The authors compare house prices with the cost of building, and find that in most of the United States homes sell for about what they cost to build. In a few coastal metropolitan areas, the San Francisco Bay Area among them, prices are far above construction cost. They attribute the gap mainly to restrictions on building, and argue that it keeps workers out of the most productive places, with costs for the whole economy.
+
+*Think about:* the county effects in the chapter's model capture how much more a similar flat rents for in San Francisco than elsewhere. What supply-side reasons could make that effect so large, and could the prediction model tell you whether allowing more construction would lower rents? What kind of evidence would?
+
+**Glaeser, E. L., Kominers, S. D., Luca, M. & Naik, N. (2018). "Big Data and Big Cities: The Promises and Limitations of Improved Measures of Urban Life." *Economic Inquiry* 56(1): 114–137.** [doi.org/10.1111/ecin.12364](https://doi.org/10.1111/ecin.12364)
+
+The authors show how online and image data can measure cities in ways surveys cannot: for example, predicting the income of a neighbourhood from Street View images, or tracking local businesses from online reviews. They are equally clear about the limits: the measures are predictions, they can miss places that are poorly covered online, and they do not by themselves answer causal questions.
+
+*Think about:* suppose you added features built from street images to the rent model. What would the model probably learn from them, and what would go wrong if landlords could see which visible features raise the voucher?
+
 **Reading.** Géron, ch. 4, for the normal equation, the three flavours of gradient descent, polynomial regression and learning curves. ISLP (James, Witten, Hastie, Tibshirani & Taylor 2023), ch. 3 and ch. 7, for linear regression as prediction and for polynomials, splines and generalised additive models. Duan (1983), "Smearing Estimate: A Nonparametric Retransformation Method", *Journal of the American Statistical Association* 78(383), for smearing.

@@ -693,4 +693,26 @@ rho_d = spearmanr(pdist(e1), pdist(e2)).statistic
 
 The two maps differ in layout (islands can be rotated, reflected, or placed differently), and the rank correlation between their pairwise distances is `{python} f"{rho_d:.2f}"`. Who is close to whom is broadly stable; the overall arrangement is partly an accident of the run. That is the right way to use t-SNE: trust the local neighbourhoods that persist across seeds and settings, and nothing else.
 
+## Economics reading
+
+Principal components are the standard way economists summarise many correlated series. These papers apply them to macroeconomic forecasting and to the yield curve of this chapter.
+
+**Litterman, R. B. & Scheinkman, J. (1991). "Common Factors Affecting Bond Returns." *Journal of Fixed Income* 1(1): 54–61.** [doi.org/10.3905/jfi.1991.692347](https://doi.org/10.3905/jfi.1991.692347)
+
+The paper behind the level, slope and curvature section. Litterman and Scheinkman apply factor analysis to returns on US Treasury bonds of different maturities and find that three factors account for nearly all of their movement: a shift of the whole curve, a tilt between short and long rates, and a bend in the middle. Bond traders and central banks have used that description ever since to measure and hedge interest-rate risk.
+
+*Think about:* the factors are statistical, but economists give them economic names. What might move the "level" factor (expected inflation, say) and what might move the "slope" (the stance of monetary policy)? Why is naming a component an economic argument rather than something the PCA tells you?
+
+**Stock, J. H. & Watson, M. W. (2002). "Forecasting Using Principal Components From a Large Number of Predictors." *Journal of the American Statistical Association* 97(460): 1167–1179.** [doi.org/10.1198/016214502388618960](https://doi.org/10.1198/016214502388618960)
+
+Macroeconomists have hundreds of monthly series and only a few hundred months. Stock and Watson summarise a large panel of US series with a handful of principal components and use those components to forecast output and inflation. Forecasts built on the components beat standard benchmarks, because a few common factors carry most of what the many series know about the economy. This is principal components regression, the chapter's short section, at national scale.
+
+*Think about:* the components are chosen to explain the predictors, not the variable you want to forecast. When could the first few components of a big macro data set be useless for forecasting inflation, and how would you find out?
+
+**McCracken, M. W. & Ng, S. (2016). "FRED-MD: A Monthly Database for Macroeconomic Research." *Journal of Business & Economic Statistics* 34(4): 574–589.** [doi.org/10.1080/07350015.2015.1086655](https://doi.org/10.1080/07350015.2015.1086655)
+
+The authors built a freely available, regularly updated monthly database of more than a hundred US macroeconomic series, hosted on FRED, along with the transformations needed to make each one roughly stationary. They extract principal components from it and show that the first few line up with recognisable aspects of the economy such as real activity, prices and interest rates.
+
+*Think about:* the chapter calls PC1 of the Factbook data a development index. If you found that PC1 of FRED-MD tracks the business cycle, what checks would you want before using it as an "index of economic activity", and what would you do about series that are missing in early years?
+
 **Reading.** Géron, ch. 7, for PCA, its randomized and incremental variants, and other dimensionality-reduction methods. ISLP (James, Witten, Hastie, Tibshirani & Taylor 2023), §12.2, for PCA, and §6.3 for principal components regression. Litterman & Scheinkman (1991), "Common Factors Affecting Bond Returns", for level, slope and curvature; Stock & Watson (2002), "Forecasting Using Principal Components from a Large Number of Predictors", for factor models in macroeconomics.

@@ -569,4 +569,26 @@ print(cap, win.params["treat"], win.bse["treat"])
 
 Capping at the 99th percentile (493 rounds) gives an effect of -0.28 rounds (SE 0.56), against -1.16 with everyone and -0.04 without the top player. The winsorized estimate is the one I would report, with the others in a footnote: it does not hinge on one implausible row, and it uses a rule I could have written down before seeing the data, which dropping “the player who looks odd” is not. None of the three suggests that a later gate raised engagement.
 
+## Economics reading
+
+Online experiments have changed how economists study advertising and markets. These papers show what a large randomized test can overturn, and how hard it can be to detect an effect that is real.
+
+**Blake, T., Nosko, C. & Tadelis, S. (2015). “Consumer Heterogeneity and Paid Search Effectiveness: A Large-Scale Field Experiment.” *Econometrica* 83(1): 155–174.** [doi.org/10.3982/ecta12423](https://doi.org/10.3982/ecta12423)
+
+eBay spent heavily on search-engine ads, and its own data showed that people who clicked the ads bought a lot. The authors ran experiments, switching some of the ads off (on some search engines, and in randomly chosen local markets), and found that ads on searches for the brand name “eBay” did almost nothing: users who would have clicked the ad simply clicked the free link below it. Ads on other searches did affect infrequent and new customers, but frequent buyers, who make up most of the sales, would have come anyway. The return on the spending was far lower than the observational numbers suggested.
+
+*Think about:* this is the “players who pass level 40” mistake in a business with real money at stake. Why does the correlation between seeing an ad and buying overstate the ad’s effect, and why would the bias be largest for the most loyal customers?
+
+**Lewis, R. A. & Rao, J. M. (2015). “The Unfavorable Economics of Measuring the Returns to Advertising.” *Quarterly Journal of Economics* 130(4): 1941–1973.** [doi.org/10.1093/qje/qjv023](https://doi.org/10.1093/qje/qjv023)
+
+The authors study a large set of randomized online display-ad campaigns at major retailers. The problem they document is power. Individual spending is so variable, and the effect of any one campaign so small relative to it, that even experiments with very large samples often cannot tell a campaign that pays for itself from one that loses money. It is the minimum detectable effect section of this chapter with millions of users and a disappointing answer.
+
+*Think about:* Cookie Cats measures a yes-or-no outcome; a retailer measures spending, which is mostly zeros with a few very large values. Using the chapter’s formula for the minimum detectable effect, explain why the noisier outcome needs so many more users, and why a firm might keep paying for ads it can never prove work.
+
+**Athey, S. & Imbens, G. W. (2017). “The State of Applied Econometrics: Causality and Policy Evaluation.” *Journal of Economic Perspectives* 31(2): 3–32.** [doi.org/10.1257/jep.31.2.3](https://doi.org/10.1257/jep.31.2.3)
+
+A readable survey of the tools economists use to estimate causal effects, with randomized experiments as the benchmark and quasi-experimental designs (regression discontinuity, difference-in-differences, synthetic controls) as the substitutes when randomizing is impossible. The authors also stress supplementary analyses, such as placebo tests and checks on robustness, which play the role that the sample ratio check plays here, and they discuss how machine learning can help find which groups respond most to a treatment.
+
+*Think about:* moving a gate in a game is cheap to randomize. Pick a policy question where randomizing is impossible or unethical (raising a state’s minimum wage, say), choose one of the paper’s designs for it, and state what assumption has to stand in for the coin flip.
+
 **Reading.** Kohavi, Tang & Xu (2020), *Trustworthy Online Controlled Experiments*, chs. 1–3 for the practice of online experiments and ch. 21 on sample ratio mismatch. Deng, Xu, Kohavi & Walker (2013) for CUPED. Angrist & Pischke (2009), *Mostly Harmless Econometrics*, ch. 2, for potential outcomes and why randomization works. Athey & Imbens (2017), “The Econometrics of Randomized Experiments”, for regression adjustment and design. Problem Set 3 applies all of this to a real email experiment (Hillstrom’s MineThatData data).

@@ -468,4 +468,26 @@ print((freq_en == 1).sum(), ((freq_en > 0) & (freq_en < 1)).sum(), (freq_en == 0
 
 With a 50/50 mix, 10 covariates are selected in every resample, 38 only sometimes and 3 never, against 9, 38 and 4 for the LASSO. The elastic net is more stable: the ridge part of its penalty keeps correlated covariates in together rather than flipping between them. Either way, the remedy for instability is not a cleverer penalty but a humbler interpretation.
 
+## Economics reading
+
+The LASSO arrived in economics with two jobs: choosing controls for causal questions, and predicting with many variables. These papers cover both, plus the market whose prices this chapter predicts.
+
+**Belloni, A., Chernozhukov, V. & Hansen, C. (2014). “High-Dimensional Methods and Inference on Structural and Treatment Effects.” *Journal of Economic Perspectives* 28(2): 29–50.** [doi.org/10.1257/jep.28.2.29](https://doi.org/10.1257/jep.28.2.29)
+
+When you have many possible controls, which ones belong in a regression meant to estimate one causal effect? The authors show that running the LASSO once on the outcome and keeping its survivors can drop a variable that matters because it drives the treatment. Their fix, double selection, runs the LASSO twice, once to predict the outcome and once to predict the treatment, keeps every variable chosen by either, and then estimates the effect by ordinary regression. They apply it to well-known empirical questions and show how it changes conclusions.
+
+*Think about:* suppose you wanted the effect of a state’s childcare subsidy on county childcare prices, with the fifty-one county facts as possible controls. Why is a variable that predicts which states subsidise (but only weakly predicts prices) dangerous to drop, and what does this tell you about the chapter’s warning not to read LASSO coefficients as effects?
+
+**Giannone, D., Lenza, M. & Primiceri, G. E. (2021). “Economic Predictions with Big Data: The Illusion of Sparsity.” *Econometrica* 89(5): 2409–2437.** [doi.org/10.3982/ecta17842](https://doi.org/10.3982/ecta17842)
+
+The LASSO works best when only a few predictors matter. The authors ask whether economic data really look like that, using a Bayesian model that lets the data choose between a few large effects and many small ones, in data sets from macroeconomics, finance and microeconomics. In most of them the data prefer many small effects. A sparse model can still predict well, but the particular variables it keeps are then one of many near-equivalent choices.
+
+*Think about:* the chapter found that only a few covariates survived every bootstrap resample. How does this paper explain that instability, and if many county facts each matter a little, what would you tell a state agency that asked which facts “drive” childcare prices?
+
+**Herbst, C. M. (2023). “Child Care in the United States: Markets, Policy, and Evidence.” *Journal of Policy Analysis and Management* 42(1): 255–304.** [doi.org/10.1002/pam.22436](https://doi.org/10.1002/pam.22436)
+
+A survey of the economics of American childcare: why prices are high for families while the workers are among the lowest paid, how regulation such as staff-to-child ratios shapes costs, how public subsidies work, and what the evidence says about their effects on parents’ employment and children’s development. It is the economic background the prices in this chapter’s data lack.
+
+*Think about:* a prediction model for county prices uses whatever correlates with them. Using Herbst’s account of the market, which features would you expect to matter most (wages, regulation, demand from working parents), and why would a good prediction still not tell you what a new subsidy would do to prices?
+
 **Reading.** Géron, ch. 4, the section on regularised linear models (ridge, LASSO, elastic net, early stopping). ISLP (James, Witten, Hastie, Tibshirani & Taylor 2023), ch. 6.2, for shrinkage methods and the geometry of why the LASSO gives zeros. Mullainathan & Spiess (2017), “Machine Learning: An Applied Econometric Approach”, *Journal of Economic Perspectives* 31(2), for why selected variables are not “the” model. Belloni, Chernozhukov & Hansen (2014), “High-Dimensional Methods and Inference on Structural and Treatment Effects”, *Journal of Economic Perspectives* 28(2), for double selection.

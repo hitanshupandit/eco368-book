@@ -216,7 +216,7 @@ gs = GridSearchCV(make_pipeline(make_prep(), SVC()), grid, cv=cv3,
                   scoring="roc_auc", n_jobs=-1).fit(X_sub, y_sub)
 ```
 
-The names `svc__C` and `svc__gamma` mean “the parameter `C` of the pipeline step called `svc`”; `make_pipeline` names each step after its class, in lower case. The whole search took 10 seconds.
+The names `svc__C` and `svc__gamma` mean “the parameter `C` of the pipeline step called `svc`”; `make_pipeline` names each step after its class, in lower case. The whole search took 15 seconds.
 
 ![Cross-validated AUC for each combination of C and gamma.](13_support_vector_machines_files/figure-commonmark/cell-20-output-1.png)
 
@@ -237,10 +237,10 @@ The rule is general. A best value on the boundary of the grid tells you only tha
 Now the comparison the chapter has been building to. Same leak-free features, same stratified split and the same 23,878 test bookings as Chapter 12, so the logistic regression’s AUC below is exactly the one reported there.
 
                                        test AUC  fit seconds
-    Logistic, all training data           0.889        0.716
-    Logistic, 10,000 subsample            0.887        0.045
-    Linear SVM, 10,000 subsample          0.884        0.079
-    RBF SVM (tuned), 10,000 subsample     0.913        1.527
+    Logistic, all training data           0.889        0.731
+    Logistic, 10,000 subsample            0.887        0.046
+    Linear SVM, 10,000 subsample          0.884        0.077
+    RBF SVM (tuned), 10,000 subsample     0.913        1.583
 
 Three readings.
 
@@ -272,7 +272,7 @@ On a log–log plot, the slope of the line is the power at which time grows with
 
 | Model, full training data        | Fit seconds | Test AUC |
 |----------------------------------|-------------|----------|
-| `LinearSVC(C=0.1)`               | 1.1         | 0.887    |
+| `LinearSVC(C=0.1)`               | 1.2         | 0.887    |
 | `SGDClassifier(loss="hinge")`    | 0.5         | 0.884    |
 | Logistic regression (Chapter 12) | 0.7         | 0.889    |
 
@@ -284,7 +284,7 @@ Using the fitted slope, how long would one RBF SVM fit take on 32,000 bookings? 
 
 ### Solution
 
-The fit on 16,000 bookings took 4.0 seconds. Each doubling multiplies it by 2 raised to the power 1.9, about 3.8, so about 15 seconds at 32,000 and 57 at 64,000. A tuning grid multiplies that again by the number of combinations times the number of folds. This is a rough projection (the exponent changes with the data and the hyperparameters, and large `C` is slower), but the shape of the answer does not change: kernel methods are for thousands or tens of thousands of cases, not millions.
+The fit on 16,000 bookings took 4.0 seconds. Each doubling multiplies it by 2 raised to the power 1.9, about 3.8, so about 15 seconds at 32,000 and 58 at 64,000. A tuning grid multiplies that again by the number of combinations times the number of folds. This is a rough projection (the exponent changes with the data and the hyperparameters, and large `C` is slower), but the shape of the answer does not change: kernel methods are for thousands or tens of thousands of cases, not millions.
 
 ## From scores to probabilities
 
@@ -478,9 +478,9 @@ auc_nys = roc_auc_score(y_test, nys.decision_function(X_test))
 print(f"{sec_nys:.1f} s, test AUC {auc_nys:.3f}")
 ```
 
-    8.1 s, test AUC 0.916
+    8.3 s, test AUC 0.916
 
-On all 95,512 training bookings the Nyström approximation fits in 8.1 seconds and reaches a test AUC of 0.916, against 0.913 for the exact RBF SVM on 10,000 bookings and 0.889 for logistic regression. It builds 500 features whose similarities mimic the RBF kernel, using 500 training bookings as landmarks, and then fits a linear SVM to them, so it scales like a linear model. It matches or beats the exact kernel SVM, because it can afford to learn from ten times as many bookings: an approximate kernel on all the data beats an exact one on a tenth of it.
+On all 95,512 training bookings the Nyström approximation fits in 8.3 seconds and reaches a test AUC of 0.916, against 0.913 for the exact RBF SVM on 10,000 bookings and 0.889 for logistic regression. It builds 500 features whose similarities mimic the RBF kernel, using 500 training bookings as landmarks, and then fits a linear SVM to them, so it scales like a linear model. It matches or beats the exact kernel SVM, because it can afford to learn from ten times as many bookings: an approximate kernel on all the data beats an exact one on a tenth of it.
 
 **7.**
 
@@ -494,5 +494,27 @@ for name, p_ in [("logistic", p_logit_full), ("SVM", p_svm)]:
     SVM: resells 21.1% of rooms; 6.0% of those guests show up
 
 Of the rooms each model resells, 5.7% (logistic) and 6.0% (SVM) belong to guests who turn up and must be walked. The SVM resells more rooms with almost the same hit rate, so it is mostly finding more of the near-certain cancellations, not gambling more: that is better ranking, which is what its higher AUC promised.
+
+## Economics reading
+
+Support vector machines are less common in economics than in computer science, but they had their moment in text classification, and the reviews below explain where they fit among the tools an economist might use.
+
+**Antweiler, W. & Frank, M. Z. (2004). “Is All That Talk Just Noise? The Information Content of Internet Stock Message Boards.” *Journal of Finance* 59(3): 1259–1294.** [doi.org/10.1111/j.1540-6261.2004.00662.x](https://doi.org/10.1111/j.1540-6261.2004.00662.x)
+
+The authors collected a very large number of messages posted on internet stock message boards about large US companies and asked whether the chatter predicts anything. They hand-labelled a sample of messages as bullish, bearish or neither, trained text classifiers (Naive Bayes, with a support vector machine as a check) to label the rest, and then related the resulting measures to stock returns, trading volume and volatility. The classifier was not the result, only a way to turn text into a variable.
+
+*Think about:* the classifier misreads some messages, sarcasm for example. When a mislabelled “bullishness” measure is then used as a regressor, which way does the error push the estimated relationship with returns? Compare that with the hotel, where the classifier’s errors are the final decision.
+
+**Gentzkow, M., Kelly, B. & Taddy, M. (2019). “Text as Data.” *Journal of Economic Literature* 57(3): 535–574.** [doi.org/10.1257/jel.20181020](https://doi.org/10.1257/jel.20181020)
+
+A survey of how economists turn documents (newspaper articles, speeches, central bank statements, product reviews) into numbers and use them. It covers how to represent text, how to reduce its huge number of features, and which supervised methods work when there are far more words than documents, a setting where regularised linear classifiers, the family that linear SVMs belong to, tend to do well. Applications range from measuring policy uncertainty to media slant.
+
+*Think about:* text gives you tens of thousands of features and perhaps a few thousand labelled documents. Why does that setting favour a linear boundary with a penalty over a flexible kernel, and how does it relate to the chapter’s section on linear SVMs for big data?
+
+**Athey, S. & Imbens, G. W. (2019). “Machine Learning Methods That Economists Should Know About.” *Annual Review of Economics* 11(1): 685–725.** [doi.org/10.1146/annurev-economics-080217-053433](https://doi.org/10.1146/annurev-economics-080217-053433)
+
+A guided tour, for economists, of the main supervised and unsupervised learning methods, with attention to what they are good at and how they can be adapted to the questions economists care about: causal effects, policy evaluation and inference. It is a good map of where SVMs sit relative to penalised regression, trees, forests and neural networks.
+
+*Think about:* an SVM gives the hotel a score and a boundary, not a probability or an interpretable coefficient. For the resale decision, what does the hotel lose by not having an honest probability, and when (pricing an overbooking policy, explaining it to a regulator) would that loss matter?
 
 **Reading.** Géron, Appendix C, for support vector machines, including the dual problem and support vector regression. ISLP (James, Witten, Hastie, Tibshirani & Taylor 2023), ch. 9, for the maximal margin classifier, soft margins (in the budget convention) and the connection to logistic regression. Hsu, Chang & Lin, “A Practical Guide to Support Vector Classification” (National Taiwan University), for the practice of scaling and grid search. Platt (1999), “Probabilistic Outputs for Support Vector Machines”, for the calibration step.

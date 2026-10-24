@@ -711,4 +711,26 @@ Without scaling, KNN's CV RMSE rises from \$`{python} usd(knn_cv.mean())` to \$`
 
 **7.** That the model cannot tell her. It predicts rents for flats like hers by finding similar listings; it was never built to say what *changing* her flat would do. Flats with two bathrooms differ from flats with one in many ways besides the bathroom (they are bigger, newer, in different buildings). If you force an answer, by changing `baths` to 2 and predicting again, you will get a number, and it will mix the bathroom with everything that comes with bathrooms. Her question is a $\hat\beta$ problem.
 
+## Economics reading
+
+The distinction between $\hat y$ and $\hat\beta$ runs through the rest of the book. These papers make the case for prediction in economics, and say where it stops.
+
+**Mullainathan, S. & Spiess, J. (2017). "Machine Learning: An Applied Econometric Approach." *Journal of Economic Perspectives* 31(2): 87–106.** [doi.org/10.1257/jep.31.2.87](https://doi.org/10.1257/jep.31.2.87)
+
+The best short introduction to machine learning for economists. The authors predict house values from housing characteristics, compare regression with several machine-learning methods on held-out data, and show that the flexible methods predict better. They then show that a method like the LASSO picks quite different variables in different random subsamples while predicting about equally well, which is their warning against reading the fitted model as the truth about which variables matter.
+
+*Think about:* the rent model of this chapter could set a housing voucher. Name one decision for which its $\hat y$ is enough, and one (a new zoning rule, a rent subsidy) for which you would need a $\hat\beta$, and explain why the model cannot give you the second.
+
+**Kleinberg, J., Ludwig, J., Mullainathan, S. & Obermeyer, Z. (2015). "Prediction Policy Problems." *American Economic Review* 105(5): 491–495.** [doi.org/10.1257/aer.p20151023](https://doi.org/10.1257/aer.p20151023)
+
+Some policy decisions turn on a causal effect and some turn on a prediction. If you are deciding whether to carry an umbrella, you need to predict rain, not to know what causes it. The authors' example is joint-replacement surgery for elderly patients: the operation pays off only for patients who will live long enough to benefit, so predicting who will die soon can identify surgeries that are likely to be wasted. They argue that many such prediction problems in policy have been neglected.
+
+*Think about:* if a city began setting vouchers from a rent model, landlords would learn what the model rewards. How could that feedback break the prediction, and why does this make "the world does not respond to my $\hat y$" an assumption worth stating?
+
+**Einav, L. & Levin, J. (2014). "Economics in the age of big data." *Science* 346(6210).** [doi.org/10.1126/science.1243089](https://doi.org/10.1126/science.1243089)
+
+A short overview of how large private and administrative data sets, from tax records to online transactions, are changing what economists can measure and predict. The authors describe new opportunities in measurement and prediction, the difficulty of turning large data into causal answers, and the problems of access when the most valuable data belong to firms and governments.
+
+*Think about:* the Craigslist listings in this chapter are a big data set of this kind. Which flats never appear in it (rented by word of mouth, rent-controlled units, luxury buildings with their own websites), and how might that change what the model's "typical" rent means for a housing office?
+
 **Reading.** Géron, ch. 1–2, for the landscape of machine learning and a longer project built step by step. ISLP (James, Witten, Hastie, Tibshirani & Taylor 2023), ch. 2 and 5, for the statistics of the bias–variance trade-off and cross-validation. Mullainathan & Spiess (2017), "Machine Learning: An Applied Econometric Approach", *Journal of Economic Perspectives* 31(2), for why $\hat y$ is not $\hat\beta$.

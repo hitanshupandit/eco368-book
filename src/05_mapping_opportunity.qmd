@@ -571,4 +571,26 @@ Across the `{python} f"{len(r6):,}"` counties with enough children in both group
 
 **7.** Comparing movers with non-movers confounds the effect of the place with whatever made the family move: a new job, a divorce, ambition. All movers share those reasons for moving. Comparing children who move to the same destination at different ages, ideally siblings in the same family, holds the family and the move fixed and varies only *how long* the child is exposed to the new place. If outcomes improve with every extra year of exposure, and the improvement stops at the age when exposure should stop mattering, sorting cannot easily explain the pattern.
 
+## Economics reading
+
+The Opportunity Atlas grew out of a research programme. These three papers take you from the first map, to the evidence that place itself matters, to an experiment.
+
+**Chetty, R., Hendren, N., Kline, P. & Saez, E. (2014). "Where is the Land of Opportunity? The Geography of Intergenerational Mobility in the United States." *Quarterly Journal of Economics* 129(4): 1553–1623.** [doi.org/10.1093/qje/qju022](https://doi.org/10.1093/qje/qju022)
+
+The paper that started the maps. Using federal tax records that link children to their parents, the authors measure mobility with income ranks, as this chapter does, and show that the chances of a poor child rising vary enormously across commuting zones. They then correlate mobility with local characteristics and find that areas with more residential segregation, more inequality, weaker schools, less social capital and more single-parent families have lower mobility. They are careful to call these correlations, not causes.
+
+*Think about:* the paper uses commuting zones, roughly local labour markets, while our maps use counties. Why might an economist prefer the labour-market unit for a question about adult earnings, and what does each choice do to the "small places are noisy" problem?
+
+**Chetty, R. & Hendren, N. (2018). "The Impacts of Neighborhoods on Intergenerational Mobility I: Childhood Exposure Effects." *Quarterly Journal of Economics* 133(3): 1107–1162.** [doi.org/10.1093/qje/qjy007](https://doi.org/10.1093/qje/qjy007)
+
+This is the "sorting or place?" question taken head on. The authors follow families who move between areas and compare siblings, or children in different families, who arrive in the same new place at different ages. Children who move to a higher-mobility area earlier end up with adult incomes closer to the outcomes of children raised there, roughly in proportion to the years they spend there. That pattern is hard to explain by sorting alone, because the family is the same and only the timing differs.
+
+*Think about:* the design assumes that whether a family moves when its child is 8 or when she is 14 is unrelated to anything else that affects the child's future. Name one reason that assumption could fail, and say which way it would bias the estimated effect of place.
+
+**Chetty, R., Hendren, N. & Katz, L. F. (2016). "The Effects of Exposure to Better Neighborhoods on Children: New Evidence from the Moving to Opportunity Experiment." *American Economic Review* 106(4): 855–902.** [doi.org/10.1257/aer.20150572](https://doi.org/10.1257/aer.20150572)
+
+In the 1990s the Moving to Opportunity programme offered families in public housing, by lottery, a voucher that could be used only in a low-poverty neighbourhood. Early studies found little effect on adults. Linking the children to their later tax records, this paper finds that those who moved when young earned substantially more as adults and were more likely to attend college, while those who moved as teenagers did not gain. Because the voucher was assigned at random, sorting cannot explain the difference.
+
+*Think about:* the Atlas shows that some places produce better outcomes; the experiment shows that moving young children to such places helps them. Would giving every poor family a voucher to the highest-mobility counties reproduce the effect? Think about what might change in those places if many families arrived at once.
+
 **Reading.** Chetty, Hendren, Kline and Saez (2014), "Where is the Land of Opportunity?", *QJE*. Chetty, Friedman, Hendren, Jones and Porter (2018), "The Opportunity Atlas", NBER WP 25147. Chetty and Hendren (2018), "The Impacts of Neighborhoods on Intergenerational Mobility I and II", *QJE*. Chetty, Hendren and Katz (2016), "The Effects of Exposure to Better Neighborhoods on Children", *AER*. Rey, Arribas-Bel and Wolf, *Geographic Data Science with Python* (2023, free online), chs. 1–4, for geopandas, projections and spatial joins.

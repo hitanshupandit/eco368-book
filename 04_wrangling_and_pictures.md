@@ -437,11 +437,11 @@ CSV is text, stored row by row. To read one column you parse every byte of every
 
 |                                  | Size on disk | pandas read time |
 |----------------------------------|--------------|------------------|
-| `rent.csv`                       | 40 MB        | 0.38 s           |
+| `rent.csv`                       | 40 MB        | 0.35 s           |
 | `rent.parquet`                   | 12 MB        | 0.02 s           |
 | `rent.parquet`, two columns only |              | 0.001 s          |
 
-The Parquet file is 3 times smaller and reads 24 times faster, two columns faster again, and it remembers every column’s type. **Anything you will read more than once should be stored as Parquet**; converting is one line, `pd.read_csv(path).to_parquet(new_path)`.
+The Parquet file is 3 times smaller and reads 22 times faster, two columns faster again, and it remembers every column’s type. **Anything you will read more than once should be stored as Parquet**; converting is one line, `pd.read_csv(path).to_parquet(new_path)`.
 
 ### DuckDB and Polars
 
@@ -765,5 +765,27 @@ ax.set(ylabel="Gini points removed", title="Redistribution, 2005 vs 2022"); plt.
 ![](04_wrangling_and_pictures_files/figure-commonmark/cell-45-output-1.png)
 
 9 countries are observed in both years. Redistribution rose in 3 of them: Canada, Finland, Ireland. With so few countries, and the latest year for each set by survey timing, treat this as description, not a trend in “the world”.
+
+## Economics reading
+
+Three papers about what sits behind a published table: who answered, what was filled in for those who did not, and what it takes to stitch sources together.
+
+**Meyer, B. D., Mok, W. K. C. & Sullivan, J. X. (2015). “Household Surveys in Crisis.” *Journal of Economic Perspectives* 29(4): 199–226.** [doi.org/10.1257/jep.29.4.199](https://doi.org/10.1257/jep.29.4.199)
+
+The big federal household surveys are the raw material for most of what we know about income, poverty and transfers, and this paper documents that they are getting worse at their job. Fewer households agree to be interviewed, more of those who do skip individual questions, and the answers they give about programmes like food stamps and welfare fall further and further short of what the administrative records say was paid out. The authors line survey totals up against program totals, which is the “check the data against a number you trust” step of this chapter done at national scale.
+
+*Think about:* the wealth table in this chapter comes from a voluntary survey. If very wealthy families and very poor families are both less likely to respond, and response differs by race, which way could the published white–Black wealth ratio be pushed, and what outside number would you check it against?
+
+**Bollinger, C. R. & Hirsch, B. T. (2006). “Match Bias from Earnings Imputation in the Current Population Survey: The Case of Imperfect Matching.” *Journal of Labor Economics* 24(3): 483–519.** [doi.org/10.1086/504276](https://doi.org/10.1086/504276)
+
+When someone in the Current Population Survey refuses to report earnings, the Census Bureau fills in the blank with the earnings of a similar-looking respondent. “Similar” means similar on the handful of characteristics the procedure matches on. Bollinger and Hirsch show that if the variable you care about is not one of those, the imputed records carry no information about it, and the gap you estimate (for union members versus non-members, say) is pulled toward zero. Imputation is a modelling choice, and its defaults have consequences for every regression run on the file.
+
+*Think about:* suppose you filled each missing county childcare price in this chapter with its state’s average, then regressed price on county income within states. Using the match-bias logic, which way would the imputed counties bias the slope, and what would you report alongside it?
+
+**Derenoncourt, E., Kim, C. H., Kuhn, M. & Schularick, M. (2024). “Wealth of Two Nations: The U.S. Racial Wealth Gap, 1860–2020.” *Quarterly Journal of Economics* 139(2): 693–750.** [doi.org/10.1093/qje/qjad044](https://doi.org/10.1093/qje/qjad044)
+
+The Survey of Consumer Finances only reaches back a few decades, so to see the racial wealth gap over 160 years the authors splice together census returns, state tax records and modern surveys into one series. The gap closed fast in the decades after emancipation and then nearly stopped closing; they argue that differences in what white and Black households own, and the higher capital gains on assets held mostly by white households, help explain the stall. Most of the paper’s work is wrangling: making sources with different units, definitions and coverage mean the same thing.
+
+*Think about:* some historical sources count wealth per person and modern surveys count it per household. If Black households were on average larger, how would switching from one row definition to the other move the ratio, and why does “what is one row?” become an economic question here?
 
 **Reading.** Wickham (2014), “Tidy Data”, *Journal of Statistical Software*. McKinney, *Python for Data Analysis*, 3rd ed. (2022), chs. 5, 7, 8 and 10, free online, for the pandas verbs, missing data, merges and `groupby`. Little and Rubin, *Statistical Analysis with Missing Data* (2019), ch. 1, for the MCAR/MAR/MNAR framework; Bollinger and Hirsch (2006), “Match Bias from Earnings Imputation in the Current Population Survey”, *Journal of Labor Economics*, for what imputation does to economic estimates. Schwabish (2014), “An Economist’s Guide to Visualizing Data”, *Journal of Economic Perspectives*; Healy, *Data Visualization* (2018, free at socviz.co); Cattaneo, Crump, Farrell and Feng (2024), “On Binscatter”, *American Economic Review*.

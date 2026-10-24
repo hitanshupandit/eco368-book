@@ -69,9 +69,9 @@ t0 = time.perf_counter(); total_vec = np.sum(x ** 2); t_vec = time.perf_counter(
 print(f"loop {t_loop:.3f}s, vectorized {t_vec:.4f}s")
 ```
 
-    loop 0.112s, vectorized 0.0010s
+    loop 0.103s, vectorized 0.0010s
 
-The vectorized sum ran about 109 times faster on this machine. The same trick applies to whole simulations: instead of looping over 5,000 experiments, draw a 5,000-row matrix, one experiment per row, and compute every row’s estimate at once with `axis=1`. That is how the coverage study in the next section runs in under a second.
+The vectorized sum ran about 104 times faster on this machine. The same trick applies to whole simulations: instead of looping over 5,000 experiments, draw a 5,000-row matrix, one experiment per row, and compute every row’s estimate at once with `axis=1`. That is how the coverage study in the next section runs in under a second.
 
 ### Worked example — what vectorizing costs in memory
 
@@ -330,9 +330,9 @@ t_par = time.perf_counter() - t0
 print(f"serial {t_ser:.1f}s, parallel {t_par:.1f}s, identical: {serial == parallel}")
 ```
 
-    serial 0.4s, parallel 0.6s, identical: True
+    serial 0.4s, parallel 0.5s, identical: True
 
-The two runs give **identical** results (True), because each industry’s task has its own seed no matter which core runs it, or in what order. On this machine the serial run took 0.4 seconds and the parallel one 0.6. Starting worker processes has a fixed cost, so parallelism pays off for chunky tasks (a bootstrap that takes minutes) and can lose on tiny ones. Vectorize first; parallelize when you still have to wait.
+The two runs give **identical** results (True), because each industry’s task has its own seed no matter which core runs it, or in what order. On this machine the serial run took 0.4 seconds and the parallel one 0.5. Starting worker processes has a fixed cost, so parallelism pays off for chunky tasks (a bootstrap that takes minutes) and can lose on tiny ones. Vectorize first; parallelize when you still have to wait.
 
 Three rules for seeds, which I enforce in every project:
 
@@ -544,5 +544,27 @@ print(rmse(err_ind), np.percentile(d7, [2.5, 97.5]))
     0.4021648614574597 [0.04434709 0.05655391]
 
 With industry but no state, the test RMSE is 0.402, an improvement over the small model of 0.051 log points (95% interval 0.044 to 0.057). That is 72% of the big model’s total gain over the small one; state adds the rest. Industry does most of the work, which makes sense in a survey spanning tech workers and non-profit staff, and state adds the geography of pay.
+
+## Economics reading
+
+Simulation and resampling are how economists check whether their standard errors deserve trust. Two papers do that, and a third puts the chapter’s salary gap in its economic context.
+
+**Bertrand, M., Duflo, E. & Mullainathan, S. (2004). “How Much Should We Trust Differences-in-Differences Estimates?” *Quarterly Journal of Economics* 119(1): 249–275.** [doi.org/10.1162/003355304772839588](https://doi.org/10.1162/003355304772839588)
+
+This is the laboratory idea from the start of the chapter, aimed at a whole literature. The authors take real wage data from the Current Population Survey, invent fake state laws at random dates, and estimate their “effects” the way published papers did. Because the laws are fake, the true effect is zero, yet conventional standard errors declare a significant effect far more often than 5% of the time, because outcomes in a state are correlated from year to year. They then compare fixes, including resampling whole states rather than individual observations.
+
+*Think about:* why is a placebo whose true effect you know to be zero such a powerful check on a method? Connect the paper’s fix to this chapter’s section on resampling the way the data were collected: what is the “cluster” in their setting, and what goes wrong if you bootstrap individual workers instead?
+
+**Young, A. (2019). “Channeling Fisher: Randomization Tests and the Statistical Insignificance of Seemingly Significant Experimental Results.” *Quarterly Journal of Economics* 134(2): 557–598.** [doi.org/10.1093/qje/qjy029](https://doi.org/10.1093/qje/qjy029)
+
+Young re-analyses a large set of randomized experiments published in economics journals using permutation tests, the method of this chapter: shuffle the treatment labels, recompute the estimate many times, and see where the real one falls. Many results that were significant with the authors’ regression standard errors are not significant under the permutation test. In small samples, a few influential observations make the conventional formulas too confident.
+
+*Think about:* a permutation test answers a narrow question, “would I see a difference this large if treatment made no difference to anyone?” Why does it need no formula for the standard error, and when is that sharp null the question a policymaker actually cares about?
+
+**Blau, F. D. & Kahn, L. M. (2017). “The Gender Wage Gap: Extent, Trends, and Explanations.” *Journal of Economic Literature* 55(3): 789–865.** [doi.org/10.1257/jel.20160995](https://doi.org/10.1257/jel.20160995)
+
+A survey of what economists know about the gap between men’s and women’s pay in the United States, built on a long panel of household data. The gap narrowed a great deal in the 1980s and more slowly after. Differences in education and experience now explain little of it; differences in occupation and industry explain more, and a sizeable part remains unexplained. The authors weigh the candidate reasons, from the hours premium in high-paying jobs to discrimination.
+
+*Think about:* the bootstrap in this chapter tells you how much the *Ask a Manager* gap could move if a different set of readers had answered. It says nothing about who chose to read the blog and fill in the survey. Name the kind of error the bootstrap is silent about, and say how a representative survey like the one Blau and Kahn use helps.
 
 **Reading.** ISLP (James, Witten, Hastie, Tibshirani & Taylor 2023), ch. 5, §5.2, for the bootstrap in the statistical-learning setting. Efron & Tibshirani (1993), *An Introduction to the Bootstrap*, for everything else about it, including better intervals than the percentile one. Cameron & Miller (2015), “A Practitioner’s Guide to Cluster-Robust Inference”, *Journal of Human Resources*, for clusters, and Cameron, Gelbach & Miller (2008) for the wild cluster bootstrap. Huntington-Klein (2022), *The Effect*, ch. 15, for simulation as a habit of mind.

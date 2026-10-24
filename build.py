@@ -34,7 +34,7 @@ VENV = os.path.normpath(os.path.join(HERE, "..", "ECON 368", ".venv", "bin"))
 
 #  Sections every chapter is supposed to carry. The build reports a missing one,
 #  because the usual reason is that I stopped writing halfway and forgot.
-TEMPLATE = ["## In Python", "## What goes wrong", "## Exercises", "### Answers"]
+TEMPLATE = ["## In Python", "## What goes wrong", "## Exercises", "### Answers", "## Economics reading"]
 
 #  The book follows Géron's chapter order but is written from scratch. These
 #  phrases mean a passage leans on the textbook instead of explaining, so the
@@ -87,7 +87,7 @@ def assemble():
             anchor = re.sub(r"[^a-z0-9 -]", "", title.lower()).replace(" ", "-")
             toc.append(f"- [{title}](#{anchor})")
             for sub in re.findall(r"^## (.+)$", text, re.M):
-                if not sub.startswith(("In Python", "What goes wrong", "Exercises", "Answers")):
+                if not sub.startswith(("In Python", "What goes wrong", "Exercises", "Answers", "Economics reading")):
                     toc.append(f"  - {sub.strip()}")
         body.append(text.rstrip() + "\n")
         is_chapter = not name.startswith(("00_", "9"))

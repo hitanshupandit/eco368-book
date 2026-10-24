@@ -582,4 +582,26 @@ The default argument `last` is a single dictionary shared by every call (a Pytho
 
 **8.** Online prices cover only products and retailers that sell online, which in the 2000s skewed towards some categories (electronics, groceries at big chains) and away from others (services, housing, small shops), so an online index could track a different basket from the CPI. Cavallo addressed it by validating: scraping retailers that sell both online and offline, collecting in-store prices for the same products at the same time, and showing that they were identical about 72% of the time. Housing and services are still largely missing, so online price indices are best seen as a fast, high-frequency complement to the official CPI, not a replacement.
 
+## Economics reading
+
+Three papers by economists who went to the web for data that no agency publishes, and thought hard about whether it measures what they wanted.
+
+**Cavallo, A. & Rigobon, R. (2016). “The Billion Prices Project: Using Online Prices for Measurement and Research.” *Journal of Economic Perspectives* 30(2): 151–178.** [doi.org/10.1257/jep.30.2.151](https://doi.org/10.1257/jep.30.2.151)
+
+The story that opens this chapter, told by the people who did it. They explain how they scraped daily prices from large online retailers around the world, how they turned those prices into inflation indices, and how closely the indices track official consumer price statistics (closely in most countries, not at all in Argentina while its official figures were in doubt). They also show what else daily product-level prices let you study: how often prices change, and whether the same good costs the same in different countries.
+
+*Think about:* an online index only sees products that are sold online by the retailers you chose to scrape. What kinds of spending (rent, services, small shops) does it miss, and when would that make it a poor guide to the cost of living for low-income households?
+
+**Edelman, B. (2012). “Using Internet Data for Economic Research.” *Journal of Economic Perspectives* 26(2): 189–206.** [doi.org/10.1257/jep.26.2.189](https://doi.org/10.1257/jep.26.2.189)
+
+A practical tour of how economists collect data from websites, written for researchers rather than programmers. Edelman describes what can be gathered (prices, listings, reviews, auctions), how online settings make field experiments cheap, and the hazards: data that change under your feet, samples that are not representative, and the legal and ethical questions that come with automated collection. Much of it is the “rules of the road” section of this chapter, argued from experience.
+
+*Think about:* a site’s terms forbid scraping, but the prices you need are visible to anyone with a browser. Who bears the costs of your scraper (the site’s servers, its competitors, its customers), and how would you decide whether collecting the data is acceptable?
+
+**Choi, H. & Varian, H. (2012). “Predicting the Present with Google Trends.” *Economic Record* 88(s1): 2–9.** [doi.org/10.1111/j.1475-4932.2012.00809.x](https://doi.org/10.1111/j.1475-4932.2012.00809.x)
+
+Official statistics such as retail sales or unemployment claims arrive with a lag; Google search volumes arrive almost immediately. Choi and Varian add search-volume indices to simple time-series forecasting models and show that they improve “nowcasts” of the current month’s value for series like car sales, travel and initial jobless claims. The data come from a web service, not from a file anyone curated for economists.
+
+*Think about:* Google Trends reports an index that Google scales and samples itself, and it can revise past values. What does that mean for someone trying to reproduce a nowcast a year later, and why does caching the raw API response, as this chapter does, matter for research and not just for speed?
+
 **Reading.** McKinney, *Python for Data Analysis*, 3rd ed. (2022), ch. 6, for JSON, HTML tables and web APIs. Mitchell, *Web Scraping with Python*, 3rd ed. (2024), for scraping in depth, including JavaScript pages. Cavallo and Rigobon (2016), “The Billion Prices Project”, *Journal of Economic Perspectives*; Cavallo (2017), “Are Online and Offline Prices Similar?”, *American Economic Review*; Edelman (2012), “Using Internet Data for Economic Research”, *Journal of Economic Perspectives*.
