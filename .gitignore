@@ -1,0 +1,25 @@
+# This repository holds ONLY original course writing and code.
+# Never commit: student work or grades, problem-set solutions, exam keys,
+# or third-party copyrighted material (the Géron book PDF/epub, other
+# instructors' slides).
+*marks*.csv
+*grades*.csv
+grading/
+*solutions*.ipynb
+*KEY*
+*.epub
+*ml_ebook*.pdf
+*Hands-On*Machine*Learning*.pdf
+
+# downloaded data: chapters fetch it from the original URLs
+data/
+
+# build noise
+src/*.md
+src/*_files/
+src/.quarto/
+.quarto/
+**/*.quarto_ipynb
+__pycache__/
+*.pyc
+.DS_Store

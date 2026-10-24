@@ -1,0 +1,32 @@
+title: Data Science for Economists
+description: A reading companion for Econ 368 — Bates College
+author: Hitanshu Pandit
+
+# GitHub Pages renders every .md file here as a page. Chapter 9 becomes
+#   https://hitanshupandit.github.io/eco368-book/09_end_to_end_project.html
+# and that URL never changes once published, so it is safe to link from the
+# course website and from Lyceum.
+#
+# NO THEME, same as the Econ 250 book: _layouts/default.html is a plain layout
+# that loads MathJax so the maths is typeset.
+
+markdown: kramdown
+kramdown:
+  math_engine: mathjax
+  input: GFM
+
+plugins:
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+  collections: false
+
+# Sources, build scripts, the assembled single file and the plan are for me,
+# not for students. They stay in the repository but are not published as pages.
+exclude:
+  - src/
+  - build.py
+  - ECO368.md
+  - PLAN.md
+  - README.md
+  - requirements.txt

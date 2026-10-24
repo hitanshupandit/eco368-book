@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  MathJax cannot typeset the <title> element -- it is plain text in the browser
+  tab -- so a heading like "$\chi^2$" would show there as raw LaTeX. Strip the
+  markup and substitute the few symbols that appear in chapter titles.
+-->
+{%- assign t = page.title
+      | replace: '\chi^2', 'chi-squared'
+      | replace: '\bar X', 'x-bar'
+      | replace: '\mu', 'mu'
+      | replace: '\sigma', 'sigma'
+      | replace: '$', ''
+      | replace: '\\', '' -%}
+<title>{% if t %}{{ t }} · {% endif %}{{ site.title }}</title>
+
+<!--
+  No Jekyll theme. A theme gave us a coloured banner nobody asked for and, worse,
+  loaded no MathJax -- so every $\chi^2$ in the book rendered as literal dollar
+  signs and backslashes. This layout is deliberately plain: a readable column of
+  text, and the maths actually typeset.
+-->
+
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
+      processEscapes: true
+    },
+    options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+
+<style>
+  :root {
+    --ink:   #1a1a1a;
+    --soft:  #5a5a5a;
+    --rule:  #d8d8d8;
+    --accent:#8b1a1a;
+    --code:  #f6f6f4;
+  }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.62;
+    color: var(--ink);
+    background: #fff;
+    margin: 0 auto;
+    padding: 2.6rem 1.15rem 5rem;
+    max-width: 44rem;
+  }
+
+  h1, h2, h3 {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.25;
+    margin: 2.1rem 0 0.7rem;
+  }
+  h1 { font-size: 1.72rem; margin-top: 0; }
+  h2 { font-size: 1.24rem; border-bottom: 1px solid var(--rule); padding-bottom: 0.3rem; }
+  h3 { font-size: 1.05rem; color: var(--soft); }
+
+  p, li { margin: 0.75rem 0; }
+  blockquote {
+    margin: 1.2rem 0;
+    padding: 0.1rem 0 0.1rem 1rem;
+    border-left: 3px solid var(--accent);
+    color: var(--soft);
+  }
+
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid #e2c9c9; }
+  a:hover { border-bottom-color: var(--accent); }
+
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.86em;
+  }
+  code { background: var(--code); padding: 0.1em 0.33em; border-radius: 3px; }
+  pre {
+    background: var(--code);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 0.85rem 1rem;
+    overflow-x: auto;
+    line-height: 1.45;
+  }
+  pre code { background: none; padding: 0; }
+
+  table { border-collapse: collapse; margin: 1.2rem 0; font-size: 0.93em; width: 100%; }
+  th, td { border-bottom: 1px solid var(--rule); padding: 0.42rem 0.6rem; text-align: left; }
+  th { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 0.88em; }
+
+  img { max-width: 100%; height: auto; display: block; margin: 1.3rem auto; }
+
+  /* Python output blocks (Quarto writes them as plain ``` fences after the code) */
+  pre + pre { margin-top: -0.6rem; background: #fff; border-style: dashed; }
+
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 2.2rem 0; }
+
+  .nav {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 0.82rem;
+    color: var(--soft);
+    padding-bottom: 1.4rem;
+    margin-bottom: 1.8rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  .foot {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 0.8rem;
+    color: var(--soft);
+    margin-top: 3.5rem;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+  }
+
+  @media (max-width: 34rem) { body { font-size: 16px; padding: 1.6rem 1rem 3rem; } }
+</style>
+</head>
+<body>
+
+{% if page.url != "/" and page.url != "/index.html" %}
+<div class="nav"><a href="{{ '/' | relative_url }}">&larr; Contents</a></div>
+{% endif %}
+
+{{ content }}
+
+<div class="foot">
+  Econ 368 · Bates College · Hitanshu Pandit ·
+  <a href="https://github.com/hitanshupandit/eco368-book">source</a>
+</div>
+
+</body>
+</html>
