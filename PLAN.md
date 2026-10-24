@@ -52,7 +52,7 @@ Students read Géron, *Hands-On Machine Learning with Scikit-Learn and PyTorch* 
 | 1 | What data science is for | description, prediction and causation; what "big" data changes | L01 | 1 |
 | 2 | Python for economists | types, lists and dictionaries, functions, NumPy, a regression by hand | L02 | — |
 | 3 | Reproducible projects with Git | folders, scripts, paths, commits, branches, pull requests | L03–L04 | — |
-| 4 | Wrangling, bigger data, and pictures | tidy data, pandas verbs, merges, Parquet/DuckDB, charts that inform | L05–L07 | — |
+| 4 | Wrangling, bigger data, and pictures | tidy data, pandas verbs, merges, **missing values**, Parquet/DuckDB, charts that inform | L05–L07 | — |
 | 5 | Mapping opportunity | the Opportunity Atlas, rank-rank mobility, geopandas, choropleths | L08–L09 | — |
 | 6 | Getting data from the web | HTTP, JSON, APIs and keys, HTML and scraping, the ethics | L10–L11 | — |
 

@@ -16,7 +16,7 @@ Chapters are published as we reach them.
 
 | | Chapter | Covers |
 |---|---|---|
-| 4 | [Wrangling, bigger data, and pictures](04_wrangling_and_pictures.md) | tidy data, pandas verbs, merges, Parquet/DuckDB, charts that inform |
+| 4 | [Wrangling, bigger data, and pictures](04_wrangling_and_pictures.md) | tidy data, pandas verbs, merges, **missing values**, Parquet/DuckDB, charts that inform |
 | 5 | [Mapping opportunity](05_mapping_opportunity.md) | the Opportunity Atlas, rank-rank mobility, geopandas, choropleths |
 | 6 | [Getting data from the web](06_data_from_the_web.md) | HTTP, JSON, APIs and keys, HTML and scraping, the ethics |
 | 7 | [A/B tests](07_ab_tests.md) | randomization, difference in means, power, CUPED, peeking, many metrics |
