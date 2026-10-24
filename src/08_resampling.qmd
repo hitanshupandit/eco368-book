@@ -1,0 +1,723 @@
+---
+format:
+  gfm:
+    wrap: none
+jupyter: python3
+execute:
+  warning: false
+---
+
+# Chapter 8 — Resampling: simulation and the bootstrap
+
+```{python}
+#| echo: false
+from pathlib import Path
+import time
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy import stats
+GARNET, GREY, BLUE, SEED = "#881124", "#8c8c8c", "#1f77b4", 368
+plt.rcParams.update({"figure.figsize": (7, 3.6), "axes.spines.top": False,
+                     "axes.spines.right": False, "font.size": 11})
+
+URL = ("https://raw.githubusercontent.com/rfordatascience/tidytuesday/"
+       "main/data/2021/2021-05-18/survey.csv")
+path = Path("../data/ask_a_manager.csv")
+if not path.exists():
+    path.parent.mkdir(exist_ok=True)
+    pd.read_csv(URL).to_csv(path, index=False)
+raw = pd.read_csv(path)
+US = {"united states", "usa", "us", "u.s.", "united states of america", "u.s.a.", "u.s", "america"}
+sal = raw[(raw["currency"] == "USD")
+          & raw["country"].str.strip().str.lower().isin(US)
+          & raw["annual_salary"].between(15_000, 1_000_000)
+          & raw["gender"].isin(["Man", "Woman"])].copy()
+sal["log_salary"] = np.log(sal["annual_salary"])
+men = sal.loc[sal["gender"] == "Man", "annual_salary"].to_numpy()
+women = sal.loc[sal["gender"] == "Woman", "annual_salary"].to_numpy()
+gap = np.median(men) - np.median(women)
+```
+
+> **The question:** in a survey of `{python} f"{len(sal):,}"` American professionals, men's median salary is \$`{python} f"{gap:,.0f}"` higher than women's. How much of that could be the luck of who answered, when no textbook formula gives the standard error of a median?
+
+
+## A laboratory where you know the truth
+
+Every estimate you have ever computed came with a standard error, and almost all of those standard errors came from a formula. For a mean it is $s/\sqrt{n}$; for an OLS coefficient the software prints it. The formulas are wonderful when they exist. They run out surprisingly quickly.
+
+Here is a gap they do not cover. The 2021 *Ask a Manager* salary survey, distributed by TidyTuesday, asked readers of a workplace-advice blog what they earn. Keeping annual salaries in US dollars between \$15,000 and \$1 million from people who answered "Man" or "Woman", we have `{python} f"{len(sal):,}"` respondents. The median man reports \$`{python} f"{np.median(men):,.0f}"`, the median woman \$`{python} f"{np.median(women):,.0f}"`. Salaries are skewed, so the median is the honest summary of a typical salary. But what is the standard error of a *difference in medians*? Of a *ratio* of medians? Of the gap in prediction error between two models? Nobody taught you a formula, because for most of these there is no simple one.
+
+This chapter is about two ways round the problem, and they share an idea: **let the computer do the repeated sampling that the formula was imagining.**
+
+- **Simulation** (also called **Monte Carlo**) makes fake data from a world you design, where you know the truth, and checks whether your method recovers it.
+- **The bootstrap** treats your one real sample as a stand-in for the population, resamples from it, and watches how much your estimate moves.
+
+The recipe for a simulation has four steps, and I would like you to know it by heart:
+
+1. Write a function that **generates data** from a world where you chose the truth.
+2. Write a function that **estimates** something from those data.
+3. **Repeat** many times and store every result.
+4. **Summarise**: the average error (bias), the spread (the standard error), how often the confidence interval covers the truth, how often the test rejects.
+
+Before we go further, a warning about the data. Ask a Manager readers are a self-selected group: `{python} f"{(sal['gender'] == 'Woman').mean():.0%}"` of our respondents are women, and they are heavily concentrated in office jobs. Everything in this chapter describes *these respondents*, not the US labour force. Resampling measures sampling noise. It cannot fix a sample that was never representative.
+
+### Worked example — a simulation has a standard error too
+
+You simulate 1,000 experiments and find that your 95% confidence interval covers the truth in 93.1% of them. Is the interval broken, or is that just luck?
+
+### Solution
+
+The coverage rate is itself an estimate: a proportion from $R$ = 1,000 trials. Its standard error is $\sqrt{\hat p(1-\hat p)/R} = \sqrt{0.931 \times 0.069 / 1000} \approx 0.008$. The gap from 95% is 1.9 points, more than two standard errors, so it is probably not luck, but it is not overwhelming either. Run 10,000 replications and the Monte Carlo standard error drops to about 0.0025, enough to tell 93% from 95% firmly. Always report it: "coverage 0.931 (Monte Carlo s.e. 0.008)".
+
+## Functions, and letting NumPy do the looping
+
+A simulation is code you will run thousands of times, change, and rerun. Two habits make that painless.
+
+**Write small functions with the random number generator passed in.** One function makes data, another estimates; neither knows about the other.
+
+```{python}
+def simulate_rct(n, effect, sd=1.0, rng=None):
+    """Two-arm experiment with a constant effect. Returns outcome y and treatment d."""
+    rng = rng if rng is not None else np.random.default_rng()
+    d = rng.binomial(1, 0.5, n)
+    return effect * d + rng.normal(0, sd, n), d
+
+def diff_in_means(y, d):
+    """Difference in means and its unequal-variance standard error (Chapter 7)."""
+    y1, y0 = y[d == 1], y[d == 0]
+    return y1.mean() - y0.mean(), np.sqrt(y1.var(ddof=1) / len(y1) + y0.var(ddof=1) / len(y0))
+
+diff_in_means(*simulate_rct(500, effect=0.2, rng=np.random.default_rng(SEED)))
+```
+
+Passing `rng` in means the *caller* controls reproducibility: the same generator gives the same answer, and two different ones give independent answers. We will need that when we go parallel.
+
+**Vectorize.** A Python loop handles one number at a time; a NumPy operation on a whole array runs in compiled code.
+
+```{python}
+x = np.random.default_rng(SEED).normal(size=1_000_000)
+t0 = time.perf_counter(); total = 0.0
+for v in x:
+    total += v ** 2
+t_loop = time.perf_counter() - t0
+t0 = time.perf_counter(); total_vec = np.sum(x ** 2); t_vec = time.perf_counter() - t0
+print(f"loop {t_loop:.3f}s, vectorized {t_vec:.4f}s")
+```
+
+The vectorized sum ran about `{python} f"{t_loop / t_vec:,.0f}"` times faster on this machine. The same trick applies to whole simulations: instead of looping over 5,000 experiments, draw a 5,000-row matrix, one experiment per row, and compute every row's estimate at once with `axis=1`. That is how the coverage study in the next section runs in under a second.
+
+### Worked example — what vectorizing costs in memory
+
+To bootstrap the median salary of the `{python} f"{len(women):,}"` women without a loop, you would draw a matrix of row indices with $B$ = 2,000 rows and one column per woman. How big is it?
+
+### Solution
+
+```{python}
+#| echo: false
+mb = 2_000 * len(women) * 8 / 1e6
+```
+
+It holds 2,000 × `{python} f"{len(women):,}"` = `{python} f"{2_000 * len(women):,}"` integers at 8 bytes each: about `{python} f"{mb:,.0f}"` MB, before you even look up the salaries, which doubles it. That fits on a laptop, but only just, and a bigger sample would not. The fully vectorized version wins when each sample is small and $B$ is large; for large samples a loop over $B$, with each step vectorized inside (one `rng.choice` and one `np.median` on a whole array), is fast and uses almost no memory. Vectorize the inner work, not necessarily everything.
+
+## Do confidence intervals really cover?
+
+```{python}
+#| echo: false
+mu_w = women.mean()
+rng = np.random.default_rng(SEED)
+R = 5_000
+cov_rows = []
+for n in [10, 30, 100, 500]:
+    xs = women[rng.integers(0, len(women), (R, n))]
+    m, se = xs.mean(axis=1), xs.std(axis=1, ddof=1) / np.sqrt(n)
+    tc = stats.t.ppf(0.975, n - 1)
+    hit = (m - tc * se <= mu_w) & (mu_w <= m + tc * se)
+    cov_rows.append({"n": n, "coverage": hit.mean(), "MC s.e.": np.sqrt(hit.mean() * (1 - hit.mean()) / R),
+                     "missed low": (m + tc * se < mu_w).mean(), "missed high": (m - tc * se > mu_w).mean()})
+cov_t = pd.DataFrame(cov_rows).set_index("n")
+```
+
+The promise of a 95% confidence interval is about repeated sampling: if you drew sample after sample and built an interval from each, 95% of the intervals would contain the true value. You never get to check that with real data, because you never know the true value. In a simulation you do.
+
+So let us make one where the "population" is real. Treat the `{python} f"{len(women):,}"` women in the survey as the entire population; their mean salary, \$`{python} f"{mu_w:,.0f}"`, is now the known truth. Draw a sample of $n$ women, build the usual $t$ interval for the mean, $\bar x \pm t_{0.975, n-1} \cdot s/\sqrt n$, and check whether it covers \$`{python} f"{mu_w:,.0f}"`. Do that `{python} f"{R:,}"` times for each sample size:
+
+```{python}
+rng = np.random.default_rng(368)
+xs = women[rng.integers(0, len(women), (5_000, 30))]       # 5,000 samples of 30, one per row
+m, se = xs.mean(axis=1), xs.std(axis=1, ddof=1) / np.sqrt(30)
+tc = stats.t.ppf(0.975, 29)
+print(((m - tc * se <= women.mean()) & (women.mean() <= m + tc * se)).mean())
+```
+
+```{python}
+#| echo: false
+print(cov_t.round(3).to_string())
+```
+
+With samples of 10, the "95%" interval covers only `{python} f"{cov_t.loc[10, 'coverage']:.1%}"` of the time; with 30, `{python} f"{cov_t.loc[30, 'coverage']:.1%}"`. Only by `{python} f"{cov_t.index[-1]}"` is it close to 95%. And look at *how* it fails: almost all the misses are on the low side. Salaries have a long right tail, so a small sample usually contains none of the big earners; its mean is too low *and* its standard deviation too small, and the interval sits entirely below the truth. The $t$ interval assumes the sample mean is roughly normal, and with skewed data that takes more observations than the "$n \geq 30$" rule of thumb suggests.
+
+That is the whole point of Monte Carlo. Not proving theorems, but checking whether a method you are about to rely on works *for data that look like yours*.
+
+### Worked example — reading a coverage table
+
+A colleague says: "Our intervals cover `{python} f"{cov_t.loc[30, 'coverage']:.1%}"` of the time instead of 95%. That's close enough." When is she right, and when is she wrong?
+
+### Solution
+
+She is right that `{python} f"{cov_t.loc[30, 'coverage']:.1%}"` is not a disaster, and the Monte Carlo standard error (`{python} f"{cov_t.loc[30, 'MC s.e.']:.3f}"`) confirms the shortfall is real rather than simulation noise. She is wrong to ignore which way the misses go. A one-sided failure is worse than a symmetric one: with salaries, a small survey will understate average pay much more often than it overstates it. If the number feeds a decision (setting a pay band, say), the bias in the misses matters more than the headline coverage.
+
+## The bootstrap
+
+```{python}
+#| echo: false
+def boot_median_gap(y1, y0, B, rng):
+    """B bootstrap draws of median(y1) - median(y0), resampling within each group."""
+    draws = np.empty(B)
+    for b in range(B):
+        draws[b] = (np.median(rng.choice(y1, size=len(y1), replace=True))
+                    - np.median(rng.choice(y0, size=len(y0), replace=True)))
+    return draws
+
+rng = np.random.default_rng(SEED)
+boot = boot_median_gap(men, women, 2_000, rng)
+se_boot = boot.std()
+lo, hi = np.percentile(boot, [2.5, 97.5])
+```
+
+Back to the real question. We have one sample, not 5,000. Ideally we would draw many new samples from the population and see how much the median gap moves, but we cannot. Efron's (1979) idea was to **treat the sample as if it were the population**, and draw from that:
+
+1. From each group, draw as many observations as it has, **with replacement**. Some people appear twice, some not at all.
+2. Recompute the statistic, here the median for men minus the median for women.
+3. Repeat $B$ times, say 2,000.
+
+The standard deviation of the $B$ bootstrap estimates is the **bootstrap standard error**. The middle 95% of them, from the 2.5th to the 97.5th percentile, is the **percentile confidence interval**.
+
+```{python}
+def boot_median_gap(y1, y0, B, rng):
+    """B bootstrap draws of median(y1) - median(y0), resampling within each group."""
+    draws = np.empty(B)
+    for b in range(B):
+        draws[b] = (np.median(rng.choice(y1, size=len(y1), replace=True))
+                    - np.median(rng.choice(y0, size=len(y0), replace=True)))
+    return draws
+
+boot = boot_median_gap(men, women, B=2_000, rng=np.random.default_rng(368))
+print(boot.std(), np.percentile(boot, [2.5, 97.5]))
+```
+
+We resample *within* each group because that mimics how the data arose: a sample of men and a sample of women, each of a given size. The median gap is \$`{python} f"{gap:,.0f}"`, with a bootstrap standard error of \$`{python} f"{se_boot:,.0f}"` and a 95% percentile interval from \$`{python} f"{lo:,.0f}"` to \$`{python} f"{hi:,.0f}"`. Sampling noise cannot plausibly explain a gap of this size among these respondents. (What *causes* it, whether industry, job title, hours or discrimination, is a different question that no amount of resampling answers.)
+
+```{python}
+#| echo: false
+#| fig-cap: "Two thousand bootstrap draws of the median gender gap in salary."
+fig, ax = plt.subplots()
+ax.hist(boot, bins=60, color=GREY)
+ax.axvline(gap, color=GARNET, lw=2.5, label=f"estimate: ${gap:,.0f}")
+ax.axvline(lo, color=GARNET, ls="--", label="95% percentile interval")
+ax.axvline(hi, color=GARNET, ls="--")
+ax.set(xlabel="Bootstrap median gap, men minus women ($)", ylabel="Count",
+       title="The bootstrap distribution is lumpy, because salaries are round numbers")
+ax.legend(frameon=False, fontsize=9); plt.show()
+```
+
+Notice the spikes. People report round salaries (\$75,000, \$100,000), so a resampled median keeps landing on the same few values. The interval is not centred on the estimate either: the estimate sits near its upper end. The bootstrap reports that honestly, where a formula of the form "estimate ± 1.96 SE" would force symmetry.
+
+> The bootstrap does not create information. It measures how much the information you have would wobble if the sample had come out differently.
+
+### Worked example — one bootstrap draw by hand
+
+Eight salaries, in thousands of dollars (hypothetical): 28, 35, 41, 47, 52, 60, 75, 120. A random draw of eight positions with replacement gives positions 2, 2, 3, 5, 6, 6, 7, 8. What is the bootstrap sample and its median, and how does it compare with the original median?
+
+### Solution
+
+The bootstrap sample is 35, 35, 41, 52, 60, 60, 75, 120 (the second and sixth values appear twice; the first and fourth not at all). With eight values the median is the average of the fourth and fifth: (52 + 60)/2 = 56. The original median is (47 + 52)/2 = 49.5. Repeat this a few thousand times and the spread of those medians is the standard error. With only eight observations, though, each resample can only rearrange the same eight numbers, which is a warning we come back to.
+
+## A ratio: cents on the dollar
+
+```{python}
+#| echo: false
+rng = np.random.default_rng(SEED)
+ratio_hat = np.median(women) / np.median(men)
+ratio_boot = np.array([np.median(rng.choice(women, len(women))) / np.median(rng.choice(men, len(men)))
+                       for _ in range(2_000)])
+r_lo, r_hi = np.percentile(ratio_boot, [2.5, 97.5])
+```
+
+Pay gaps are usually quoted as a ratio: women earn so many cents for every dollar men earn. Among our respondents the median woman earns **`{python} f"{100 * ratio_hat:.0f}"` cents** for each dollar earned by the median man. A ratio of two medians is a statistic with no textbook standard error at all, and the bootstrap does not care:
+
+```{python}
+rng = np.random.default_rng(368)
+ratio_boot = np.array([np.median(rng.choice(women, len(women))) / np.median(rng.choice(men, len(men)))
+                       for _ in range(2_000)])
+np.percentile(ratio_boot, [2.5, 97.5])
+```
+
+The 95% interval runs from `{python} f"{100 * r_lo:.1f}"` to `{python} f"{100 * r_hi:.1f}"` cents. The same few lines would work for a Gini coefficient, a 90/10 percentile ratio, a correlation, or an elasticity computed in two steps. That is the bootstrap's great virtue: one method for nearly every statistic, with no new algebra each time.
+
+### Worked example — formula or bootstrap?
+
+For which of these could you write down a standard error from intro statistics, and which need the bootstrap? **(a)** The difference in *mean* salary between men and women. **(b)** The difference in median salary. **(c)** The ratio of median salaries. **(d)** The 90th percentile of women's salaries divided by the 10th.
+
+### Solution
+
+```{python}
+#| echo: false
+m1, m0 = men.mean(), women.mean()
+se_mean_formula = np.sqrt(men.var(ddof=1) / len(men) + women.var(ddof=1) / len(women))
+rng = np.random.default_rng(SEED)
+boot_mean = np.array([rng.choice(men, len(men)).mean() - rng.choice(women, len(women)).mean()
+                      for _ in range(2_000)])
+```
+
+Only **(a)**: it is the Chapter 7 formula, $\sqrt{s_1^2/n_1 + s_0^2/n_0}$. The other three need either the bootstrap or a fair amount of asymptotic theory (there are formulas for the standard error of a median, but they need an estimate of the density of salaries at the median, which is its own headache). A good habit is to bootstrap (a) as a check: the formula gives \$`{python} f"{se_mean_formula:,.0f}"` and the bootstrap \$`{python} f"{boot_mean.std():,.0f}"`. When the two agree where both apply, you can trust the bootstrap where only it does.
+
+## When the bootstrap works, and when it does not
+
+```{python}
+#| echo: false
+y_all = sal["annual_salary"].to_numpy()
+is_man_all = (sal["gender"] == "Man").to_numpy()
+truth_gap = gap
+
+def covers_gap(n, rng, B=500):
+    s = rng.integers(0, len(y_all), n)
+    ys, gs = y_all[s], is_man_all[s]
+    m_, w_ = ys[gs], ys[~gs]
+    bm = np.median(m_[rng.integers(0, len(m_), (B, len(m_)))], axis=1)
+    bw = np.median(w_[rng.integers(0, len(w_), (B, len(w_)))], axis=1)
+    l_, h_ = np.percentile(bm - bw, [2.5, 97.5])
+    return l_ <= truth_gap <= h_
+
+def covers_quantile(q, n, rng, B=500):
+    x_ = rng.choice(women, n)
+    bs = np.percentile(x_[rng.integers(0, n, (B, n))], q, axis=1)
+    l_, h_ = np.percentile(bs, [2.5, 97.5])
+    return l_ <= np.percentile(women, q) <= h_
+
+rng = np.random.default_rng(SEED)
+R2 = 500
+cov_gap = {n: np.mean([covers_gap(n, rng) for _ in range(R2)]) for n in [60, 300]}
+cov_q = {q: np.mean([covers_quantile(q, 50, rng) for _ in range(R2)]) for q in [50, 90, 100]}
+```
+
+Is the bootstrap interval itself any good? We can check it exactly as we checked the $t$ interval. Treat all `{python} f"{len(sal):,}"` respondents as the population, so the true median gap is the \$`{python} f"{gap:,.0f}"` we computed. Draw a sample, bootstrap a 95% interval with $B$ = 500, record whether it covers the truth, and repeat `{python} R2` times. That is a simulation wrapped around a bootstrap, half a million medians in all, and it takes a few seconds.
+
+- Samples of 300 respondents (about `{python} f"{is_man_all.mean() * 300:.0f}"` men): coverage `{python} f"{cov_gap[300]:.1%}"`.
+- Samples of 60 (about `{python} f"{is_man_all.mean() * 60:.0f}"` men): coverage `{python} f"{cov_gap[60]:.1%}"`.
+
+(The Monte Carlo standard error with `{python} R2` replications is about one percentage point.) For a median, the bootstrap holds up well with a few dozen men in each sample, and starts to slip when there are only a handful. Now try statistics further out in the tail, from samples of 50 women:
+
+| Statistic | Coverage of the "95%" bootstrap interval |
+|---|---|
+| Median (50th percentile) | `{python} f"{cov_q[50]:.1%}"` |
+| 90th percentile | `{python} f"{cov_q[90]:.1%}"` |
+| Maximum | `{python} f"{cov_q[100]:.1%}"` |
+
+The maximum is a catastrophe. A bootstrap sample can never contain a salary larger than the largest one in the original sample, so the bootstrap distribution of the maximum is piled up at, and below, the sample maximum, which is almost always below the true one. The rule: **the bootstrap struggles at the edges of the data** (maxima, minima, extreme percentiles), **in very small samples** (it can only reshuffle what it has), and **with dependent data resampled as if independent**, which is the next section but one.
+
+### Worked example — how often is the maximum resampled?
+
+In a bootstrap sample of size $n$, what is the chance that the largest original observation appears at least once? Use $n$ = 50.
+
+### Solution
+
+Each draw misses it with probability $1 - 1/n$, so all $n$ draws miss it with probability $(1 - 1/n)^n$, which for $n$ = 50 is `{python} f"{(1 - 1/50)**50:.3f}"` (close to $e^{-1} \approx 0.368$). So about `{python} f"{1 - (1 - 1/50)**50:.0%}"` of bootstrap samples have exactly the original maximum as *their* maximum, and the rest have something smaller. The bootstrap distribution has a big spike at the sample maximum and nothing above it. The same $e^{-1}$ appears again in Chapter 15: about 37% of observations are left out of each bootstrap sample, and random forests use them as a free test set.
+
+## A permutation test
+
+```{python}
+#| echo: false
+law = sal[sal["industry"] == "Law"]
+y_law = law["annual_salary"].to_numpy()
+man_law = (law["gender"] == "Man").to_numpy()
+obs_law = np.median(y_law[man_law]) - np.median(y_law[~man_law])
+rng = np.random.default_rng(SEED)
+perm_law = np.empty(5_000)
+for r in range(5_000):
+    s_ = rng.permutation(man_law)
+    perm_law[r] = np.median(y_law[s_]) - np.median(y_law[~s_])
+p_law = np.mean(np.abs(perm_law) >= abs(obs_law))
+```
+
+The bootstrap gives an interval. A **permutation test** answers a different question: *if gender had nothing to do with salary, how often would we see a gap this large just from how the labels happened to fall?* If the labels do not matter, shuffling them should not matter either. So shuffle them, recompute the gap, and repeat.
+
+Take the `{python} f"{len(law):,}"` respondents who work in law, `{python} f"{man_law.sum()}"` of them men. The observed median gap is \$`{python} f"{obs_law:,.0f}"`.
+
+```{python}
+y, is_man = law["annual_salary"].to_numpy(), (law["gender"] == "Man").to_numpy()
+rng = np.random.default_rng(368)
+perm = np.empty(5_000)
+for r in range(5_000):
+    shuffled = rng.permutation(is_man)                     # same number of "men", random people
+    perm[r] = np.median(y[shuffled]) - np.median(y[~shuffled])
+np.mean(np.abs(perm) >= abs(obs_law))
+```
+
+`{python} f"Only {p_law:.4f}" if p_law > 0 else "None"` of the 5,000 shuffled gaps `{python} "are" if p_law > 0 else "is"` as large as the real one, in absolute value. That share is the permutation $p$-value`{python} "" if p_law > 0 else "; here all we can say is that it is below 1/5,000 = 0.0002"`. It assumes almost nothing: not normality, not a large sample, not a formula for the standard error of a median. Its one assumption is that, under the null, the labels are exchangeable, which is exactly true in a randomized experiment and a reasonable description of "no association" in a survey.
+
+Keep the two methods straight:
+
+- The **bootstrap** resamples *observations* to measure how much an estimate would vary. It answers "how precise is my estimate?"
+- The **permutation test** reshuffles *labels* to build a world where the null is true. It answers "could this be chance?"
+
+### Worked example — a small industry
+
+```{python}
+#| echo: false
+sales = sal[sal["industry"] == "Sales"]
+y_s, m_s = sales["annual_salary"].to_numpy(), (sales["gender"] == "Man").to_numpy()
+obs_s = np.median(y_s[m_s]) - np.median(y_s[~m_s])
+rng = np.random.default_rng(SEED)
+perm_s = np.array([(lambda q: np.median(y_s[q]) - np.median(y_s[~q]))(rng.permutation(m_s))
+                   for _ in range(5_000)])
+p_s = np.mean(np.abs(perm_s) >= abs(obs_s))
+welch_s = stats.ttest_ind(np.log(y_s[m_s]), np.log(y_s[~m_s]), equal_var=False).pvalue
+```
+
+In sales there are `{python} len(sales)` respondents, only `{python} int(m_s.sum())` of them men, and the median gap is \$`{python} f"{obs_s:,.0f}"`. Run the permutation test on the median and a Welch $t$-test on log salary. Do they agree?
+
+### Solution
+
+The permutation $p$-value is `{python} f"{p_s:.3f}"` and the Welch $p$-value is `{python} f"{welch_s:.3f}"`. They are close, and both sit right at the conventional line, which is the honest answer: with `{python} int(m_s.sum())` men, a gap of \$`{python} f"{obs_s:,.0f}"` is suggestive but not conclusive. They test slightly different things (medians against mean logs), so they need not match exactly. And remember the multiple-testing lesson from Chapter 7: if you test every one of the survey's industries, a couple will cross 0.05 by chance.
+
+## Resample the way the data were collected
+
+The bootstrap's rule is to **mimic the sampling process**. So far that meant resampling individuals within each gender. But many data sets are not collected one independent person at a time.
+
+Think of a survey that sampled schools and then interviewed every teacher in each school, or a data set of workers grouped in firms, or customers grouped in cities. People in the same cluster resemble each other: teachers in one school share a principal, a budget, a local labour market. Twenty teachers from one school carry less independent information than twenty teachers from twenty schools. Resample individuals as if they were independent and you will understate the noise, sometimes by a factor of several.
+
+The fix is the **cluster bootstrap**: resample whole clusters with replacement, keeping everyone in a drawn cluster together. If there are 50 schools, draw 50 school IDs with replacement, stack all the teachers from the drawn schools, and recompute the statistic. The unit of resampling is the unit of sampling (or, in an experiment, the unit of randomization, as in Chapter 7). In code it is a few lines:
+
+```{python}
+def cluster_bootstrap(groups, stat, B, rng):
+    """groups: dict of cluster id -> array of outcomes. Resample whole clusters."""
+    keys = list(groups)
+    return np.array([stat(np.concatenate([groups[k] for k in rng.choice(keys, len(keys))]))
+                     for _ in range(B)])
+```
+
+```{python}
+#| echo: false
+by_state = {k: g.to_numpy() for k, g in sal.dropna(subset=["state"]).groupby("state")["log_salary"]}
+rng = np.random.default_rng(SEED)
+cb = cluster_bootstrap(by_state, np.mean, 500, rng)
+ls_all = np.concatenate(list(by_state.values()))
+ib = np.array([rng.choice(ls_all, len(ls_all)).mean() for _ in range(500)])
+```
+
+The Ask a Manager respondents were not sampled by state, so here the clusters are a stretch. Still, the mechanics are instructive. Treat the `{python} len(by_state)` values of the `state` column as clusters and bootstrap mean log salary: resampling states gives a standard error of `{python} f"{cb.std():.4f}"`, resampling individuals `{python} f"{ib.std():.4f}"`. Salaries in California resemble other salaries in California, so a sample that happened to draw more Californians would have a different mean, and the cluster bootstrap knows it. When the number of clusters is small (fewer than 30 or so), even this is unreliable, and the **wild cluster bootstrap** is the tool to reach for (Cameron, Gelbach and Miller 2008).
+
+### Worked example — choosing what to resample
+
+What should you resample in each case? **(a)** A wage regression on 10,000 workers from a random household survey. **(b)** Test scores from a programme that was randomized across 40 schools. **(c)** Daily sales at one store over three years.
+
+### Solution
+
+**(a)** Rows (workers), the **pairs bootstrap**: resample whole rows, $(y_i, x_i)$ together. It gives standard errors that match the robust (HC) ones from your econometrics course.
+
+**(b)** Schools. The treatment was assigned by school, so the 40 schools are the independent units, and you resample them with all their students.
+
+**(c)** Not individual days: today's sales predict tomorrow's, and shuffling days destroys that dependence. Resample **blocks** of consecutive days (a block bootstrap), long enough to capture the autocorrelation.
+
+## The bootstrap for machine learning
+
+```{python}
+#| echo: false
+from sklearn.model_selection import train_test_split
+from sklearn.compose import make_column_transformer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.pipeline import make_pipeline
+from sklearn.linear_model import LinearRegression
+SMALL = ["overall_years_of_professional_experience", "highest_level_of_education_completed", "gender"]
+BIG = SMALL + ["industry", "state"]
+ml = sal.dropna(subset=SMALL).fillna({"industry": "missing", "state": "missing"})
+tr, te = train_test_split(ml, test_size=0.2, random_state=SEED)
+
+def test_errors(cols):
+    model = make_pipeline(make_column_transformer(
+        (OneHotEncoder(handle_unknown="ignore", min_frequency=20), cols)), LinearRegression())
+    model.fit(tr[cols], tr["log_salary"])
+    return te["log_salary"].to_numpy() - model.predict(te[cols])
+
+err_small, err_big = test_errors(SMALL), test_errors(BIG)
+rmse = lambda e: np.sqrt(np.mean(e ** 2, axis=-1))
+rng = np.random.default_rng(SEED)
+idx = rng.integers(0, len(te), (2_000, len(te)))
+diff_paired = rmse(err_small[idx]) - rmse(err_big[idx])
+idx2 = rng.integers(0, len(te), (2_000, len(te)))
+diff_unpaired = rmse(err_small[idx]) - rmse(err_big[idx2])
+d_lo, d_hi = np.percentile(diff_paired, [2.5, 97.5])
+```
+
+Part III of this book is about prediction, and every prediction model is judged by its error on a test set (Chapter 9). But a test set is a sample too, so a test error is an estimate with its own noise. When a new model beats an old one by a little, is it really better, or did the test set happen to suit it?
+
+The bootstrap answers that. Here is a small example, using only the linear regression you already know. Predict log salary for our respondents with two models:
+
+- a **small** model: dummies for years of experience, education and gender;
+- a **big** model: the same plus industry and state.
+
+Fit both on a random 80% of respondents and compute each model's prediction errors on the other 20%, `{python} f"{len(te):,}"` people. The test RMSE (root mean squared error, in log points) is `{python} f"{rmse(err_small):.3f}"` for the small model and `{python} f"{rmse(err_big):.3f}"` for the big one. To put an interval on the difference, resample the test rows and recompute both RMSEs on *the same* resampled rows:
+
+```{python}
+rmse = lambda e: np.sqrt(np.mean(e ** 2, axis=-1))      # works row by row on a matrix
+idx = np.random.default_rng(368).integers(0, len(te), (2_000, len(te)))   # resampled test rows
+diff = rmse(err_small[idx]) - rmse(err_big[idx])          # paired: same rows for both models
+np.percentile(diff, [2.5, 97.5])
+```
+
+The big model's advantage is `{python} f"{rmse(err_small) - rmse(err_big):.3f}"` log points, with a 95% interval from `{python} f"{d_lo:.3f}"` to `{python} f"{d_hi:.3f}"`. The interval is far from zero, so industry and state really do help predict salary, and the gain is not an accident of the split.
+
+Note that we bootstrapped only the *test set*, holding the fitted models fixed. That measures how much the test score would vary with a different test set. It does not capture the variation from refitting on a different training set; for that you would refit inside each bootstrap draw, which is slower and is the idea behind bagging (Chapter 15).
+
+### Worked example — why pair the draws?
+
+Suppose instead you resampled the test rows separately for each model, with two independent index matrices. What happens to the standard error of the difference?
+
+### Solution
+
+It grows a lot: from `{python} f"{diff_paired.std():.4f}"` (paired) to `{python} f"{diff_unpaired.std():.4f}"` (unpaired), about `{python} f"{diff_unpaired.std() / diff_paired.std():.1f}"` times as large. Some people are hard to predict for *both* models (an unusual job, a salary typed wrongly). When the same rows are drawn for both, those people raise both RMSEs together and cancel out of the difference. Drawn separately, their luck lands on one model and not the other, adding noise that has nothing to do with which model is better. It is the same logic as a paired $t$-test, or as comparing two treatments on the same patients.
+
+## Reproducible seeds and parallel work
+
+Bootstrap draws and simulation replications are independent of one another, so they can run on several processor cores at once; computer scientists call such problems **embarrassingly parallel**. In Python, `joblib` does it in one line. The only subtlety is randomness: each task needs its own independent stream of random numbers, and you want the whole run to give the same answer every time.
+
+NumPy's `SeedSequence` solves both. Spawn one child seed per task from a single master seed:
+
+```{python}
+from joblib import Parallel, delayed
+
+def industry_gap(name, seed):
+    rng = np.random.default_rng(seed)
+    d = sal[sal["industry"] == name]
+    m = d.loc[d["gender"] == "Man", "annual_salary"].to_numpy()
+    w = d.loc[d["gender"] == "Woman", "annual_salary"].to_numpy()
+    b = boot_median_gap(m, w, 1_000, rng)
+    return {"industry": name, "gap": np.median(m) - np.median(w), "se": b.std(), "n": len(d)}
+
+inds = sal["industry"].value_counts().index[:12]
+seeds = np.random.SeedSequence(368).spawn(len(inds))       # 12 independent streams
+```
+
+```{python}
+t0 = time.perf_counter(); serial = [industry_gap(n, s) for n, s in zip(inds, seeds)]
+t_ser = time.perf_counter() - t0
+t0 = time.perf_counter()
+parallel = Parallel(n_jobs=-1)(delayed(industry_gap)(n, s) for n, s in zip(inds, seeds))
+t_par = time.perf_counter() - t0
+print(f"serial {t_ser:.1f}s, parallel {t_par:.1f}s, identical: {serial == parallel}")
+```
+
+The two runs give **identical** results (`{python} serial == parallel`), because each industry's task has its own seed no matter which core runs it, or in what order. On this machine the serial run took `{python} f"{t_ser:.1f}"` seconds and the parallel one `{python} f"{t_par:.1f}"`. Starting worker processes has a fixed cost, so parallelism pays off for chunky tasks (a bootstrap that takes minutes) and can lose on tiny ones. Vectorize first; parallelize when you still have to wait.
+
+Three rules for seeds, which I enforce in every project:
+
+- **Create one generator at the top** (`rng = np.random.default_rng(368)`) and pass it around. Avoid `np.random.seed()`, which sets a hidden global state that any function can disturb.
+- **For parallel work, spawn child seeds** from one `SeedSequence`, never the same seed in every task.
+- **Save simulation output to disk** (a Parquet file in `output/`), so that a long run never has to be repeated just to change a figure.
+
+### Worked example — the same seed in every worker
+
+A student parallelizes 1,000 bootstrap draws as 10 tasks of 100, giving each task `np.random.default_rng(368)`. What goes wrong, and what does the resulting standard error look like?
+
+### Solution
+
+Every task draws exactly the same 100 bootstrap samples, so the 1,000 "draws" are 100 draws, each repeated ten times. The standard error computed from them is no better than one from 100 draws, while the student believes it came from 1,000, and if the tasks were Monte Carlo replications, the reported Monte Carlo error would be too small by a factor of about $\sqrt{10}$. Nothing crashes and nothing looks wrong, which is what makes it dangerous. The fix is `np.random.SeedSequence(368).spawn(10)`.
+
+## In Python
+
+The whole analysis, from download to an industry-by-industry chart, runnable top to bottom.
+
+```{python}
+from pathlib import Path
+import numpy as np, pandas as pd, matplotlib.pyplot as plt
+from joblib import Parallel, delayed
+
+path = Path("../data/ask_a_manager.csv")              # download once, then reuse
+if not path.exists():
+    path.parent.mkdir(exist_ok=True)
+    pd.read_csv(URL).to_csv(path, index=False)
+raw = pd.read_csv(path)
+US = {"united states", "usa", "us", "u.s.", "united states of america", "u.s.a.", "u.s", "america"}
+sal = raw[(raw["currency"] == "USD") & raw["country"].str.strip().str.lower().isin(US)
+          & raw["annual_salary"].between(15_000, 1_000_000)
+          & raw["gender"].isin(["Man", "Woman"])].copy()
+sal["log_salary"] = np.log(sal["annual_salary"])
+```
+
+The bootstrap and the permutation test, as two functions that take a generator.
+
+```{python}
+def boot_median_gap(y1, y0, B, rng):
+    return np.array([np.median(rng.choice(y1, len(y1))) - np.median(rng.choice(y0, len(y0)))
+                     for _ in range(B)])
+
+def perm_median_gap(y, is_1, R, rng):
+    obs = np.median(y[is_1]) - np.median(y[~is_1])
+    null = np.array([(lambda s: np.median(y[s]) - np.median(y[~s]))(rng.permutation(is_1))
+                     for _ in range(R)])
+    return obs, np.mean(np.abs(null) >= abs(obs))
+```
+
+The overall gap, with a percentile interval.
+
+```{python}
+rng = np.random.default_rng(368)
+men = sal.loc[sal["gender"] == "Man", "annual_salary"].to_numpy()
+women = sal.loc[sal["gender"] == "Woman", "annual_salary"].to_numpy()
+b = boot_median_gap(men, women, 2_000, rng)
+print(f"gap ${np.median(men) - np.median(women):,.0f}, SE ${b.std():,.0f}, "
+      f"95% CI {np.percentile(b, [2.5, 97.5]).round(0)}")
+```
+
+By industry, in parallel with one seed per task, plus a permutation $p$-value for each.
+
+```{python}
+def one_industry(name, seed):
+    rng = np.random.default_rng(seed)
+    d = sal[sal["industry"] == name]
+    y, is_man = d["annual_salary"].to_numpy(), (d["gender"] == "Man").to_numpy()
+    b = boot_median_gap(y[is_man], y[~is_man], 1_000, rng)
+    obs, p = perm_median_gap(y, is_man, 1_000, rng)
+    return {"industry": name, "gap": obs, "se": b.std(), "p_perm": p, "men": is_man.sum()}
+
+inds = sal["industry"].value_counts().index[:12]
+seeds = np.random.SeedSequence(368).spawn(len(inds))
+res = pd.DataFrame(Parallel(n_jobs=-1)(delayed(one_industry)(n, s) for n, s in zip(inds, seeds)))
+print(res.sort_values("gap").round(3).to_string(index=False))
+```
+
+```{python}
+#| fig-cap: "Median gender salary gap by industry, with bootstrap 95% intervals."
+res = res.sort_values("gap")
+fig, ax = plt.subplots(figsize=(7, 4.2))
+ax.errorbar(res["gap"], res["industry"], xerr=1.96 * res["se"], fmt="o", color=GARNET, capsize=3)
+ax.axvline(0, color=GREY, lw=1)
+ax.set(xlabel="Median salary, men minus women ($)", title="The gap is positive in most industries")
+plt.tight_layout(); plt.show()
+```
+
+```{python}
+#| echo: false
+n_pos = int(((res["gap"] - 1.96 * res["se"]) > 0).sum())
+n_neg = int(((res["gap"] + 1.96 * res["se"]) < 0).sum())
+```
+
+In `{python} n_pos` of the `{python} len(res)` largest industries the 95% interval lies entirely above zero, and `{python} f"in {n_neg} it lies" if n_neg else "in none does it lie"` entirely below. The intervals are much wider in industries with few men, which is the bootstrap telling you how little a few dozen respondents can say.
+
+## What goes wrong
+
+**Resampling the wrong unit.** The bootstrap is only as good as its imitation of how the data were collected. Resample individuals when the data come in clusters (schools, firms, cities) or in time order, and the standard error is too small. Resample clusters, or blocks of time, instead.
+
+**Trusting the bootstrap at the edges.** For the maximum of a sample, the "95%" bootstrap interval covered the truth `{python} f"{cov_q[100]:.0%}"` of the time in our check. Extreme percentiles, maxima, minima, and very small samples are where it breaks. If in doubt, check coverage by simulation, as we did.
+
+**Forgetting that the simulation has noise too.** A coverage rate from 500 replications has a Monte Carlo standard error of about one percentage point. Report it, and use enough replications that it is small compared with the differences you care about.
+
+**Bootstrapping only half the procedure.** If you impute missing values, choose a model, or estimate a first stage, redo all of it inside each bootstrap draw. Bootstrapping only the last step treats the earlier choices as if they were known with certainty.
+
+**The same seed in every parallel task.** It silently turns 1,000 draws into 100 repeated ten times. Spawn independent seeds from one `SeedSequence`.
+
+**Comparing models with unpaired resamples.** When two models are scored on the same test set, resample the same rows for both. Unpaired resampling made the standard error of the difference `{python} f"{diff_unpaired.std() / diff_paired.std():.1f}"` times too large here, enough to hide a real improvement.
+
+## Exercises
+
+1. A student reports: "The bootstrap 95% interval for the median gender gap is \$`{python} f"{lo:,.0f}"` to \$`{python} f"{hi:,.0f}"`." Which of these is a correct reading? (a) 95% of men earn between those amounts more than women. (b) If we repeated the survey many times, intervals built this way would contain the true median gap about 95% of the time. (c) There is a 95% chance that the median gap in the US labour force is in this range. Explain what is wrong with the others.
+
+2. Bootstrap a 95% percentile interval for the difference in *mean* salary between men and women ($B$ = 2,000), and compare it with the formula interval, estimate ± 1.96 × $\sqrt{s_1^2/n_1 + s_0^2/n_0}$.
+
+3. Bootstrap a 95% interval for the median salary gap between respondents with a PhD and those with a college degree (column `highest_level_of_education_completed`). Is the gap clearly positive?
+
+4. How many Monte Carlo replications do you need for the standard error of a simulated coverage rate near 95% to be at most 0.002?
+
+5. Run a permutation test on the difference in *mean log salary* between men and women in the insurance industry, and compare its $p$-value with a Welch $t$-test on the same variable.
+
+6. Repeat the coverage check for the bootstrap interval of the 90th percentile of women's salary, but with samples of 400 instead of 50. Does coverage improve?
+
+7. Change the big model in the machine-learning section by dropping `state`, so it adds only industry to the small model. Bootstrap the paired difference in test RMSE again. How much of the big model's advantage came from industry?
+
+### Answers
+
+**1.** (b). A confidence interval is a statement about the procedure over repeated samples. (a) confuses an interval for a *median* gap with the spread of individual salary differences; many men earn less than many women. (c) has two problems: it treats the true gap as random (in the frequentist view it is fixed and the interval is random), and, more importantly, it is about the wrong population. These are Ask a Manager readers, not the US labour force, and no interval corrects for who chose to answer.
+
+**2.**
+
+```{python}
+rng = np.random.default_rng(368)
+bm = np.array([rng.choice(men, len(men)).mean() - rng.choice(women, len(women)).mean()
+               for _ in range(2_000)])
+est_m = men.mean() - women.mean()
+se_f = np.sqrt(men.var(ddof=1) / len(men) + women.var(ddof=1) / len(women))
+print(np.percentile(bm, [2.5, 97.5]).round(0), (est_m - 1.96 * se_f).round(0), (est_m + 1.96 * se_f).round(0))
+```
+
+```{python}
+#| echo: false
+bm_lo, bm_hi = np.percentile(bm, [2.5, 97.5])
+```
+
+The mean gap is \$`{python} f"{est_m:,.0f}"`. The bootstrap interval runs from \$`{python} f"{bm_lo:,.0f}"` to \$`{python} f"{bm_hi:,.0f}"`, the formula interval from \$`{python} f"{est_m - 1.96 * se_f:,.0f}"` to \$`{python} f"{est_m + 1.96 * se_f:,.0f}"`. They agree closely, as they should with thousands of observations in each group, which is the reassurance we wanted: where a formula exists, the bootstrap reproduces it.
+
+**3.**
+
+```{python}
+edu = sal["highest_level_of_education_completed"]
+phd = sal.loc[edu == "PhD", "annual_salary"].to_numpy()
+col = sal.loc[edu == "College degree", "annual_salary"].to_numpy()
+b3 = boot_median_gap(phd, col, 2_000, np.random.default_rng(368))
+print(np.median(phd) - np.median(col), np.percentile(b3, [2.5, 97.5]))
+```
+
+```{python}
+#| echo: false
+b3_lo, b3_hi = np.percentile(b3, [2.5, 97.5])
+```
+
+The median PhD earns \$`{python} f"{np.median(phd) - np.median(col):,.0f}"` more than the median college graduate, with a 95% interval from \$`{python} f"{b3_lo:,.0f}"` to \$`{python} f"{b3_hi:,.0f}"`. `{python} "Yes, the interval is entirely above zero." if b3_lo > 0 else "No, the interval includes zero."` As always, this is a description, not the causal return to a PhD: people who do PhDs differ in many ways from those who stop at a degree.
+
+**4.** The Monte Carlo standard error is $\sqrt{p(1-p)/R}$. Setting $\sqrt{0.95 \times 0.05 / R} = 0.002$ gives $R = 0.95 \times 0.05 / 0.002^2$ = `{python} f"{0.95 * 0.05 / 0.002**2:,.0f}"` replications. Precision is expensive: halving the Monte Carlo error takes four times the replications, the same square-root law as in every sample-size calculation.
+
+**5.**
+
+```{python}
+ins = sal[sal["industry"] == "Insurance"]
+y5, m5 = ins["log_salary"].to_numpy(), (ins["gender"] == "Man").to_numpy()
+obs5 = y5[m5].mean() - y5[~m5].mean()
+rng = np.random.default_rng(368)
+null5 = np.array([(lambda s: y5[s].mean() - y5[~s].mean())(rng.permutation(m5)) for _ in range(5_000)])
+p5 = np.mean(np.abs(null5) >= abs(obs5))
+print(obs5, p5, stats.ttest_ind(y5[m5], y5[~m5], equal_var=False).pvalue)
+```
+
+```{python}
+#| echo: false
+welch5 = stats.ttest_ind(y5[m5], y5[~m5], equal_var=False).pvalue
+```
+
+Among `{python} len(ins)` insurance respondents (`{python} int(m5.sum())` men), men's mean log salary is `{python} f"{obs5:.3f}"` higher, roughly `{python} f"{np.exp(obs5) - 1:.0%}"`. The permutation $p$-value is `{python} f"{p5:.4f}" if p5 > 0 else "below 0.0002"` (no shuffle out of 5,000 produced a gap that large) and the Welch $p$-value is `{python} f"{welch5:.5f}"`. Both say the gap is very unlikely to be chance. When the sample is moderate and the outcome is in logs, the $t$-test and the permutation test usually agree; the permutation test earns its keep when samples are small or the statistic has no formula.
+
+**6.**
+
+```{python}
+rng = np.random.default_rng(368)
+cov_q400 = np.mean([covers_quantile(90, 400, rng) for _ in range(500)])
+print(cov_q[90], cov_q400)
+```
+
+With samples of 50 the interval for the 90th percentile covered `{python} f"{cov_q[90]:.1%}"` of the time; with samples of 400 it covers `{python} f"{cov_q400:.1%}"`. `{python} "Coverage improves" if cov_q400 > cov_q[90] else "Coverage does not improve"`: with more data, the 90th percentile is no longer "at the edge" of the sample, since there are now about 40 observations above it rather than 5. The maximum would not improve this way, because it is always at the edge.
+
+**7.**
+
+```{python}
+err_ind = test_errors(SMALL + ["industry"])
+d7 = rmse(err_small[idx]) - rmse(err_ind[idx])
+print(rmse(err_ind), np.percentile(d7, [2.5, 97.5]))
+```
+
+```{python}
+#| echo: false
+share_ind = (rmse(err_small) - rmse(err_ind)) / (rmse(err_small) - rmse(err_big))
+```
+
+With industry but no state, the test RMSE is `{python} f"{rmse(err_ind):.3f}"`, an improvement over the small model of `{python} f"{rmse(err_small) - rmse(err_ind):.3f}"` log points (95% interval `{python} f"{np.percentile(d7, 2.5):.3f}"` to `{python} f"{np.percentile(d7, 97.5):.3f}"`). That is `{python} f"{share_ind:.0%}"` of the big model's total gain over the small one; state adds the rest. Industry does most of the work, which makes sense in a survey spanning tech workers and non-profit staff, and state adds the geography of pay.
+
+**Reading.** ISLP (James, Witten, Hastie, Tibshirani & Taylor 2023), ch. 5, §5.2, for the bootstrap in the statistical-learning setting. Efron & Tibshirani (1993), *An Introduction to the Bootstrap*, for everything else about it, including better intervals than the percentile one. Cameron & Miller (2015), "A Practitioner's Guide to Cluster-Robust Inference", *Journal of Human Resources*, for clusters, and Cameron, Gelbach & Miller (2008) for the wild cluster bootstrap. Huntington-Klein (2022), *The Effect*, ch. 15, for simulation as a habit of mind.
