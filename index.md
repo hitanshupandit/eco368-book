@@ -1,6 +1,8 @@
 # Data Science for Economists
 
-**Teaching notes for Econ 368 · Bates College · Winter 2027**
+**These are class notes for Econ 368.**
+
+**A reading companion for Econ 368 · Bates College · Winter 2027**
 
 Hitanshu Pandit · Department of Economics
 

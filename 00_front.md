@@ -1,6 +1,6 @@
 # Data Science for Economists
 
-**Teaching notes for Econ 368 — Bates College**
+**A reading companion for Econ 368 — Bates College**
 
 Hitanshu Pandit · Department of Economics
 
